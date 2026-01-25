@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/database.types";
 import type { Product, ProductVariant, ID } from "@/types/product";
@@ -60,10 +60,21 @@ export function useProducts() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ évite setState après unmount (et évite les effets “abort” masqués)
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const fetchProducts = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
+      if (mountedRef.current) {
+        setIsLoading(true);
+        setError(null);
+      }
 
       // 1) produits
       const { data: productRows, error: pErr } = await supabase
@@ -72,9 +83,11 @@ export function useProducts() {
         .order("created_at", { ascending: false });
 
       if (pErr) {
-        setError(pErr.message);
-        setData([]);
-          console.error("Supabase product error:", pErr);
+        console.error("Supabase product error:", pErr);
+        if (mountedRef.current) {
+          setError(pErr.message);
+          setData([]);
+        }
         return;
       }
 
@@ -91,9 +104,11 @@ export function useProducts() {
           .in("product_id", productIds);
 
         if (mErr) {
-          setError(mErr.message);
-          setData([]);
-            console.error("Supabase product error:", mErr);
+          console.error("Supabase default media error:", mErr);
+          if (mountedRef.current) {
+            setError(mErr.message);
+            setData([]);
+          }
           return;
         }
 
@@ -107,17 +122,31 @@ export function useProducts() {
         normalizeProduct(row, defaultMediaMap.get(Number(row.id)) ?? null)
       );
 
-      setData(normalized);
+      if (mountedRef.current) setData(normalized);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue");
-      setData([]);
+      console.error("useProducts fetchProducts exception:", err);
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : "Erreur inconnue");
+        setData([]);
+      }
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, []);
 
+  // ✅ remplace l'ancien useEffect par une version “safe”
   useEffect(() => {
-    fetchProducts();
+    let cancelled = false;
+
+    const run = async () => {
+      if (!cancelled) await fetchProducts();
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [fetchProducts]);
 
   return { data, isLoading, error, refetch: fetchProducts };
