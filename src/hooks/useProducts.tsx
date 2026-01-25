@@ -75,6 +75,18 @@ export function useProducts() {
         setIsLoading(true);
         setError(null);
       }
+      console.log("Testing raw fetch with apikey...");
+
+fetch(import.meta.env.VITE_SUPABASE_URL + "/rest/v1/product?select=id", {
+  headers: {
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    Authorization: "Bearer " + import.meta.env.VITE_SUPABASE_ANON_KEY,
+  },
+})
+  .then((r) => r.json())
+  .then((j) => console.log("RAW REST OK:", j))
+  .catch((e) => console.error("RAW REST FAIL:", e));
+
 
       // 1) produits
       const { data: productRows, error: pErr } = await supabase
