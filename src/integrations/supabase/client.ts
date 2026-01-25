@@ -11,5 +11,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
     "Missing Supabase env vars: VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY"
   );
 }
+console.log("SUPABASE URL =", import.meta.env.VITE_SUPABASE_URL);
+console.log(
+  "SUPABASE KEY (début) =",
+  import.meta.env.VITE_SUPABASE_ANON_KEY?.slice(0, 15)
+);
+
+
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
