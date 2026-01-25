@@ -74,6 +74,7 @@ export function useProducts() {
       if (pErr) {
         setError(pErr.message);
         setData([]);
+          console.error("Supabase product error:", pErr);
         return;
       }
 
@@ -92,6 +93,7 @@ export function useProducts() {
         if (mErr) {
           setError(mErr.message);
           setData([]);
+            console.error("Supabase product error:", mErr);
           return;
         }
 
