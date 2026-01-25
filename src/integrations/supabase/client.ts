@@ -12,7 +12,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
 
 
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
