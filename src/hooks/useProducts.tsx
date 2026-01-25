@@ -3,13 +3,32 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/database.types";
 import type { Product, ProductVariant, ID } from "@/types/product";
 
+type ProductRow = Database["public"]["Tables"]["product"]["Row"];
+
+// ✅ Ce qu’on SELECT réellement (sans details)
+type ProductRowLite = Pick<
+  ProductRow,
+  | "id"
+  | "name"
+  | "slug"
+  | "description"
+  | "category"
+  | "is_active"
+  | "created_at"
+  | "updated_at"
+  | "base_price_min"
+  | "original_price"
+> & {
+  // optionnel: au cas où tu l’ajoutes plus tard
+  details?: unknown;
+};
+
 export type ProductInsert = Database["public"]["Tables"]["product"]["Insert"];
 export type ProductUpdate = Database["public"]["Tables"]["product"]["Update"];
 
 // ---- Helpers ----
 
-function getProductDisplayPrice(row: Database["public"]["Tables"]["product"]["Row"]): number {
-  // ✅ règle : prix boutique = base_price_min si variantes, sinon original_price si pas de variantes, sinon 0
+function getProductDisplayPrice(row: Pick<ProductRow, "base_price_min" | "original_price">): number {
   const bpm = row.base_price_min;
   if (typeof bpm === "number") return bpm;
 
@@ -19,10 +38,7 @@ function getProductDisplayPrice(row: Database["public"]["Tables"]["product"]["Ro
   return 0;
 }
 
-function normalizeProduct(
-  row: Database["public"]["Tables"]["product"]["Row"],
-  defaultImageUrl: string | null
-): Product {
+function normalizeProduct(row: ProductRowLite, defaultImageUrl: string | null): Product {
   return {
     id: row.id as ID,
     name: row.name,
@@ -42,8 +58,9 @@ function normalizeProduct(
     // ✅ image boutique (view product_default_media)
     image_url: defaultImageUrl,
 
-    // optionnel
-    details: (row as any).details ?? [],
+    // ✅ fallback safe (même si details non sélectionné)
+    details: Array.isArray((row as any)?.details) ? ((row as any).details as any[]) : [],
+
     images: undefined,
     variants: undefined,
   };
@@ -52,15 +69,14 @@ function normalizeProduct(
 // ---- Hooks ----
 
 /**
- * ✅ Liste des produits actifs + image par défaut via view product_default_media
- * - 2 requêtes rapides (products + default_media) puis merge
+ * ✅ Liste des produits + image par défaut via view product_default_media
  */
 export function useProducts() {
   const [data, setData] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ évite setState après unmount (et évite les effets “abort” masqués)
+  // ✅ évite setState après unmount
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -76,10 +92,10 @@ export function useProducts() {
         setError(null);
       }
 
-      // 1) produits
-      const { data: productRows, error: pErr } = await supabase
+      // 1) produits (sans details)
+      const { data: rawProducts, error: pErr } = await supabase
         .from("product")
-        .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price,details")
+        .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price")
         .order("created_at", { ascending: false });
 
       if (pErr) {
@@ -91,10 +107,10 @@ export function useProducts() {
         return;
       }
 
-      const productIds = (productRows ?? []).map((p) => p.id);
+      const productRows = (rawProducts ?? []) as ProductRowLite[];
+      const productIds = productRows.map((p) => p.id);
 
-      // 2) images par défaut (1 image par produit)
-      // si aucun produit, on évite l'appel inutile
+      // 2) images par défaut
       let defaultMediaMap = new Map<number, string | null>();
 
       if (productIds.length > 0) {
@@ -118,7 +134,7 @@ export function useProducts() {
       }
 
       // 3) merge
-      const normalized = (productRows ?? []).map((row) =>
+      const normalized = productRows.map((row) =>
         normalizeProduct(row, defaultMediaMap.get(Number(row.id)) ?? null)
       );
 
@@ -134,7 +150,6 @@ export function useProducts() {
     }
   }, []);
 
-  // ✅ remplace l'ancien useEffect par une version “safe”
   useEffect(() => {
     let cancelled = false;
 
@@ -167,7 +182,7 @@ export function useCreateProduct() {
       const { data, error: createError } = await supabase
         .from("product")
         .insert(product)
-        .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price,details")
+        .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price")
         .single();
 
       if (createError) {
@@ -176,7 +191,7 @@ export function useCreateProduct() {
       }
 
       // image default inconnue ici -> null (sera résolue au refresh)
-      return normalizeProduct(data, null);
+      return normalizeProduct((data as unknown) as ProductRowLite, null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue");
       return null;
@@ -204,7 +219,7 @@ export function useUpdateProduct() {
         .from("product")
         .update(patch)
         .eq("id", id)
-        .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price,details")
+        .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price")
         .single();
 
       if (updateError) {
@@ -212,7 +227,7 @@ export function useUpdateProduct() {
         return null;
       }
 
-      return normalizeProduct(data, null);
+      return normalizeProduct((data as unknown) as ProductRowLite, null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue");
       return null;
@@ -226,7 +241,6 @@ export function useUpdateProduct() {
 
 /**
  * ✅ Delete produit (admin) - suppression réelle
- * (Option pro: préférer is_active=false)
  */
 export function useDeleteProduct() {
   const [isLoading, setIsLoading] = useState(false);
