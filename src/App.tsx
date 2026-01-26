@@ -8,7 +8,7 @@ import RequireAdmin from "@/components/auth/RequireAdmin";
 import PaymentReturn from "./pages/PaymentReturn";
 
 import AdminLogin from "@/pages/admin/AdminLogin";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminDashboard from "@/pages/admin/AdminCatalog";
 
 import Index from "./pages/Index";
 import Shop from "./pages/Shop";

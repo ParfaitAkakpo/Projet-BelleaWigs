@@ -16,6 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import AdminProducts from "@/pages/admin/AdminProducts";
+import AdminCatalog from "@/pages/admin/AdminCatalog";
+
 const sb = supabase as any;
 
 
@@ -82,7 +85,8 @@ export default function Account() {
   const isLoggedIn = !!session?.user;
 
   // tabs
-  const [activeTab, setActiveTab] = useState<"profile" | "orders" | "favorites">("profile");
+const [activeTab, setActiveTab] = useState<
+  "profile" | "orders" | "favorites" | "admin_products" | "admin_catalog" >("profile");
 
   // orders state
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -366,26 +370,33 @@ export default function Account() {
           <div className="grid md:grid-cols-4 gap-8">
             {/* Sidebar */}
             <aside className="space-y-2">
-              {[
-                { key: "profile", icon: User, label: "Profil" },
-                { key: "orders", icon: Package, label: isAdmin ? "Commandes (Admin)" : "Mes Commandes" },
-                { key: "favorites", icon: Heart, label: "Favoris" },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => setActiveTab(item.key as any)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
-                    activeTab === item.key
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted"
-                  )}
-                  type="button"
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </button>
-              ))}
+             {[
+  { key: "profile", icon: User, label: "Profil" },
+  { key: "orders", icon: Package, label: isAdmin ? "Commandes (Admin)" : "Mes Commandes" },
+  ...(isAdmin
+    ? [
+        { key: "admin_products", icon: Package, label: "Produits (Admin)" },
+        { key: "admin_catalog", icon: Package, label: "Catalogue (Admin)" },
+      ]
+    : []),
+  { key: "favorites", icon: Heart, label: "Favoris" },
+].map((item) => (
+  <button
+    key={item.key}
+    onClick={() => setActiveTab(item.key as any)}
+    className={cn(
+      "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+      activeTab === item.key
+        ? "bg-primary text-primary-foreground"
+        : "text-muted-foreground hover:bg-muted"
+    )}
+    type="button"
+  >
+    <item.icon className="h-5 w-5" />
+    {item.label}
+  </button>
+))}
+
 
               <button
                 onClick={handleLogout}
@@ -564,6 +575,20 @@ export default function Account() {
                   )}
                 </div>
               )}
+              {/* TAB: ADMIN PRODUCTS */}
+{isAdmin && activeTab === "admin_products" && (
+  <div className="p-6 bg-card rounded-xl shadow-card">
+    <AdminProducts />
+  </div>
+)}
+
+{/* TAB: ADMIN CATALOG */}
+{isAdmin && activeTab === "admin_catalog" && (
+  <div className="p-6 bg-card rounded-xl shadow-card">
+    <AdminCatalog />
+  </div>
+)}
+
 
               {/* TAB: FAVORITES */}
               {activeTab === "favorites" && (
