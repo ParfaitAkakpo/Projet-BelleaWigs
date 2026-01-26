@@ -1,26 +1,18 @@
 // src/pages/Account.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  User,
-  Package,
-  Heart,
-  LogOut,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { User, Package, Heart, LogOut, Mail, Lock, Eye, EyeOff } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import AdminProducts from "@/pages/admin/AdminProducts";
+
+import AdminProductsPanel from "@/pages/admin/AdminProductsPanel";
 import AdminCatalog from "@/pages/admin/AdminCatalog";
 
 const sb = supabase as any;
-
 
 type Country = "togo" | "benin";
 const phoneCodes: Record<Country, string> = { togo: "+228", benin: "+229" };
@@ -73,22 +65,23 @@ function formatDate(iso?: string | null) {
   return d.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
 }
 
+type TabKey = "profile" | "orders" | "favorites" | "admin_products" | "admin_catalog";
+
 export default function Account() {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
 
-  // auth state
+  // auth
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const isLoggedIn = !!session?.user;
 
   // tabs
-const [activeTab, setActiveTab] = useState<
-  "profile" | "orders" | "favorites" | "admin_products" | "admin_catalog" >("profile");
+  const [activeTab, setActiveTab] = useState<TabKey>("profile");
 
-  // orders state
+  // orders
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string>("");
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -99,14 +92,13 @@ const [activeTab, setActiveTab] = useState<
   // form
   const [fullName, setFullName] = useState("");
   const [country, setCountry] = useState<Country>("togo");
-  const [phone, setPhone] = useState(""); // sans indicatif
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
 
-  // --- session + listener ---
+  // session listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
 
@@ -117,69 +109,75 @@ const [activeTab, setActiveTab] = useState<
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // --- profil ---
+  // load profile
   useEffect(() => {
-   async function loadProfile() {
-  if (!session?.user?.id) {
-    setProfile(null);
-    return;
-  }
+    async function loadProfile() {
+      if (!session?.user?.id) {
+        setProfile(null);
+        return;
+      }
 
-  // 1) essayer de lire
-  const res = await sb
-    .from("profiles")
-    .select("id, full_name, phone, country, role")
-    .eq("id", session.user.id)
-    .maybeSingle();
+      const res = await sb
+        .from("profiles")
+        .select("id, full_name, phone, country, role")
+        .eq("id", session.user.id)
+        .maybeSingle();
 
-  // 2) si pas de profil => on le crée
-  if (!res.data) {
-    await sb.from("profiles").upsert({
-      id: session.user.id,
-      full_name: "",
-      phone: "",
-      country: "togo",
-      role: "customer",
-      updated_at: new Date().toISOString(),
-    });
+      if (!res.data) {
+        await sb.from("profiles").upsert({
+          id: session.user.id,
+          full_name: "",
+          phone: "",
+          country: "togo",
+          role: "customer",
+          updated_at: new Date().toISOString(),
+        });
 
-    // relire
-    const res2 = await sb
-      .from("profiles")
-      .select("id, full_name, phone, country, role")
-      .eq("id", session.user.id)
-      .single();
+        const res2 = await sb
+          .from("profiles")
+          .select("id, full_name, phone, country, role")
+          .eq("id", session.user.id)
+          .single();
 
-    setProfile(res2.data as any);
+        const data2 = res2.data as Profile;
+        setProfile(data2);
 
-    setFullName(res2.data?.full_name ?? "");
-    setCountry((res2.data?.country as Country) ?? "togo");
+        setFullName(data2?.full_name ?? "");
+        setCountry((data2?.country as Country) ?? "togo");
 
-    const p = String(res2.data?.phone ?? "");
-    const code = phoneCodes[(res2.data?.country as Country) ?? "togo"];
-    setPhone(p.startsWith(code) ? p.replace(code, "").trim() : p);
-    setEmail(session.user.email ?? "");
-    return;
-  }
+        const p = String(data2?.phone ?? "");
+        const code = phoneCodes[(data2?.country as Country) ?? "togo"];
+        setPhone(p.startsWith(code) ? p.replace(code, "").trim() : p);
 
-  // 3) profil trouvé
-  const data = res.data;
+        setEmail(session.user.email ?? "");
+        return;
+      }
 
-  setProfile(data as any);
-  setFullName(data?.full_name ?? "");
-  setCountry((data?.country as Country) ?? "togo");
+      const data = res.data as Profile;
+      setProfile(data);
 
-  const p = String(data?.phone ?? "");
-  const code = phoneCodes[(data?.country as Country) ?? "togo"];
-  setPhone(p.startsWith(code) ? p.replace(code, "").trim() : p);
-  setEmail(session.user.email ?? "");
-}
+      setFullName(data?.full_name ?? "");
+      setCountry((data?.country as Country) ?? "togo");
 
+      const p = String(data?.phone ?? "");
+      const code = phoneCodes[(data?.country as Country) ?? "togo"];
+      setPhone(p.startsWith(code) ? p.replace(code, "").trim() : p);
+
+      setEmail(session.user.email ?? "");
+    }
 
     loadProfile();
   }, [session?.user?.id]);
 
   const isAdmin = useMemo(() => profile?.role === "admin", [profile?.role]);
+
+  // OPTIONNEL (confort): si admin et tu arrives, on ouvre direct Produits
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (!isAdmin) return;
+    // si tu veux arriver direct sur admin_products :
+    // setActiveTab("admin_products");
+  }, [isLoggedIn, isAdmin]);
 
   const handleToggleMode = () => {
     setIsLogin((v) => !v);
@@ -225,11 +223,7 @@ const [activeTab, setActiveTab] = useState<
           email: email.trim(),
           password,
           options: {
-            data: {
-              full_name: fullName.trim(),
-              phone: phoneFull,
-              country,
-            },
+            data: { full_name: fullName.trim(), phone: phoneFull, country },
           },
         });
         if (error) throw error;
@@ -257,6 +251,7 @@ const [activeTab, setActiveTab] = useState<
   async function saveProfile() {
     if (!session?.user?.id) return;
     setLoading(true);
+
     try {
       const phoneFull = `${phoneCodes[country]}${phone.trim()}`;
 
@@ -281,9 +276,6 @@ const [activeTab, setActiveTab] = useState<
     }
   }
 
-  // ===========================
-  // LOAD ORDERS
-  // ===========================
   async function loadOrders() {
     if (!session?.user?.id) return;
 
@@ -293,7 +285,7 @@ const [activeTab, setActiveTab] = useState<
     setOrderItems([]);
 
     try {
-      let q = sb 
+      let q = sb
         .from("orders")
         .select(
           "id, created_at, status, payment_method, delivery_mode, delivery_fee, total, full_name, phone, country, region, city, address, user_id"
@@ -301,13 +293,9 @@ const [activeTab, setActiveTab] = useState<
         .order("created_at", { ascending: false })
         .limit(50);
 
-      // client: seulement ses commandes
-      if (!isAdmin) {
-        q = q.eq("user_id", session.user.id);
-      }
+      if (!isAdmin) q = q.eq("user_id", session.user.id);
 
       const { data, error } = await q;
-
       if (error) throw error;
 
       setOrders((data ?? []) as any);
@@ -338,7 +326,6 @@ const [activeTab, setActiveTab] = useState<
         .eq("order_id", orderId);
 
       if (error) throw error;
-
       setOrderItems((data ?? []) as any);
     } catch (e: any) {
       console.error("loadOrderItems error:", e);
@@ -348,7 +335,6 @@ const [activeTab, setActiveTab] = useState<
     }
   }
 
-  // auto-load orders quand on ouvre l’onglet
   useEffect(() => {
     if (!isLoggedIn) return;
     if (activeTab !== "orders") return;
@@ -370,33 +356,34 @@ const [activeTab, setActiveTab] = useState<
           <div className="grid md:grid-cols-4 gap-8">
             {/* Sidebar */}
             <aside className="space-y-2">
-             {[
-  { key: "profile", icon: User, label: "Profil" },
-  { key: "orders", icon: Package, label: isAdmin ? "Commandes (Admin)" : "Mes Commandes" },
-  ...(isAdmin
-    ? [
-        { key: "admin_products", icon: Package, label: "Produits (Admin)" },
-        { key: "admin_catalog", icon: Package, label: "Catalogue (Admin)" },
-      ]
-    : []),
-  { key: "favorites", icon: Heart, label: "Favoris" },
-].map((item) => (
-  <button
-    key={item.key}
-    onClick={() => setActiveTab(item.key as any)}
-    className={cn(
-      "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
-      activeTab === item.key
-        ? "bg-primary text-primary-foreground"
-        : "text-muted-foreground hover:bg-muted"
-    )}
-    type="button"
-  >
-    <item.icon className="h-5 w-5" />
-    {item.label}
-  </button>
-))}
-
+              {(
+                [
+                  { key: "profile", icon: User, label: "Profil" },
+                  { key: "orders", icon: Package, label: isAdmin ? "Commandes (Admin)" : "Mes Commandes" },
+                  ...(isAdmin
+                    ? [
+                        { key: "admin_products", icon: Package, label: "Produits (Admin)" },
+                        { key: "admin_catalog", icon: Package, label: "Catalogue (Admin)" },
+                      ]
+                    : []),
+                  { key: "favorites", icon: Heart, label: "Favoris" },
+                ] as { key: TabKey; icon: any; label: string }[]
+              ).map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => setActiveTab(item.key)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                    activeTab === item.key
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
+                  type="button"
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </button>
+              ))}
 
               <button
                 onClick={handleLogout}
@@ -410,7 +397,6 @@ const [activeTab, setActiveTab] = useState<
 
             {/* Content */}
             <div className="md:col-span-3 space-y-6">
-              {/* TAB: PROFILE */}
               {activeTab === "profile" && (
                 <div className="p-6 bg-card rounded-xl shadow-card">
                   <h2 className="font-serif text-xl font-semibold text-foreground mb-6">
@@ -457,7 +443,9 @@ const [activeTab, setActiveTab] = useState<
                 </div>
               )}
 
-              {/* TAB: ORDERS */}
+              {activeTab === "admin_products" && isAdmin && <AdminProductsPanel />}
+              {activeTab === "admin_catalog" && isAdmin && <AdminCatalog />}
+
               {activeTab === "orders" && (
                 <div className="p-6 bg-card rounded-xl shadow-card">
                   <div className="flex items-center justify-between gap-4">
@@ -470,11 +458,7 @@ const [activeTab, setActiveTab] = useState<
                     </Button>
                   </div>
 
-                  {ordersError && (
-                    <p className="mt-4 text-sm text-destructive">
-                      {ordersError}
-                    </p>
-                  )}
+                  {ordersError && <p className="mt-4 text-sm text-destructive">{ordersError}</p>}
 
                   {!ordersLoading && orders.length === 0 && (
                     <div className="text-center py-10 text-muted-foreground">
@@ -498,9 +482,7 @@ const [activeTab, setActiveTab] = useState<
                                 Commande <span className="text-primary">#{o.id}</span>
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {formatDate(o.created_at)} •{" "}
-                                {o.payment_method ?? "-"} •{" "}
-                                {o.delivery_mode ?? "-"}
+                                {formatDate(o.created_at)} • {o.payment_method ?? "-"} • {o.delivery_mode ?? "-"}
                                 {o.status ? ` • ${o.status}` : ""}
                               </p>
 
@@ -514,21 +496,15 @@ const [activeTab, setActiveTab] = useState<
                             <div className="flex items-center justify-between md:justify-end gap-4">
                               <div className="text-right">
                                 <p className="text-sm text-muted-foreground">Total</p>
-                                <p className="text-lg font-bold text-foreground">
-                                  {formatMoneyFCFA(o.total)}
-                                </p>
+                                <p className="text-lg font-bold text-foreground">{formatMoneyFCFA(o.total)}</p>
                               </div>
 
-                              <Button
-                                variant="outline"
-                                onClick={() => toggleOrderDetails(o.id)}
-                              >
+                              <Button variant="outline" onClick={() => toggleOrderDetails(o.id)}>
                                 {selectedOrderId === o.id ? "Fermer" : "Voir détails"}
                               </Button>
                             </div>
                           </div>
 
-                          {/* DETAILS */}
                           {selectedOrderId === o.id && (
                             <div className="mt-4 border-t border-border pt-4">
                               <p className="text-sm text-muted-foreground mb-3">
@@ -544,10 +520,7 @@ const [activeTab, setActiveTab] = useState<
                                     <p className="text-sm text-muted-foreground">Aucun item trouvé.</p>
                                   ) : (
                                     orderItems.map((it, idx) => (
-                                      <div
-                                        key={`${it.order_id}-${idx}`}
-                                        className="flex items-center justify-between text-sm"
-                                      >
+                                      <div key={`${it.order_id}-${idx}`} className="flex items-center justify-between text-sm">
                                         <div className="text-muted-foreground">
                                           Produit #{it.product_id ?? "?"}
                                           {it.color || it.length ? (
@@ -575,27 +548,10 @@ const [activeTab, setActiveTab] = useState<
                   )}
                 </div>
               )}
-              {/* TAB: ADMIN PRODUCTS */}
-{isAdmin && activeTab === "admin_products" && (
-  <div className="p-6 bg-card rounded-xl shadow-card">
-    <AdminProducts />
-  </div>
-)}
 
-{/* TAB: ADMIN CATALOG */}
-{isAdmin && activeTab === "admin_catalog" && (
-  <div className="p-6 bg-card rounded-xl shadow-card">
-    <AdminCatalog />
-  </div>
-)}
-
-
-              {/* TAB: FAVORITES */}
               {activeTab === "favorites" && (
                 <div className="p-6 bg-card rounded-xl shadow-card">
-                  <h2 className="font-serif text-xl font-semibold text-foreground mb-2">
-                    Favoris
-                  </h2>
+                  <h2 className="font-serif text-xl font-semibold text-foreground mb-2">Favoris</h2>
                   <p className="text-sm text-muted-foreground">
                     On branchera les favoris plus tard (quand on aura la table favorites).
                   </p>
@@ -609,7 +565,7 @@ const [activeTab, setActiveTab] = useState<
   }
 
   // ===========================
-  // UI NON CONNECTÉ (LOGIN/REGISTER)
+  // UI NON CONNECTÉ
   // ===========================
   return (
     <div className="min-h-screen bg-background flex items-center justify-center py-16">
@@ -730,10 +686,7 @@ const [activeTab, setActiveTab] = useState<
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className={cn(
-                      "pl-10 pr-10",
-                      passwordError && "border-destructive focus-visible:ring-destructive"
-                    )}
+                    className={cn("pl-10 pr-10", passwordError && "border-destructive focus-visible:ring-destructive")}
                     required
                     value={confirmPassword}
                     onChange={(e) => {
@@ -763,11 +716,7 @@ const [activeTab, setActiveTab] = useState<
             <span className="text-muted-foreground">
               {isLogin ? "Pas encore de compte?" : "Déjà un compte?"}
             </span>{" "}
-            <button
-              type="button"
-              onClick={handleToggleMode}
-              className="text-primary font-medium hover:underline"
-            >
+            <button type="button" onClick={handleToggleMode} className="text-primary font-medium hover:underline">
               {isLogin ? "S'inscrire" : "Se connecter"}
             </button>
           </div>

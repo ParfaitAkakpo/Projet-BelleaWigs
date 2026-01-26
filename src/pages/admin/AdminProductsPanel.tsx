@@ -1,28 +1,27 @@
-// src/pages/admin/AdminProducts.tsx
+// src/pages/admin/AdminProductsPanel.tsx
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Package, Plus, Pencil, Trash2, X, Save, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Save, Loader2, Package } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-
 import {
-  useProducts,
+  useProductsAdmin,
   useCreateProduct,
   useUpdateProduct,
   useDeleteProduct,
-  type ProductInsert,
-  type ProductUpdate,
+  ProductInsert,
+  ProductUpdate,
 } from "@/hooks/useProducts";
 
 import { categories } from "@/database/static";
 import { formatPrice } from "@/lib/formatPrice";
 import type { Product, ID } from "@/types/product";
 
+// helper slug (simple)
 function slugify(s: string) {
-  return s
+  return String(s ?? "")
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, "")
@@ -52,10 +51,10 @@ const emptyForm = (): FormState => ({
   details: [],
 });
 
-export default function AdminProducts() {
-  const navigate = useNavigate();
+export default function AdminProductsPanel() {
+  const { data: products, isLoading, error, refetch } = useProductsAdmin();
+  const productsSafe = Array.isArray(products) ? products : [];
 
-  const { data: products, isLoading, error, refetch } = useProducts();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -63,18 +62,16 @@ export default function AdminProducts() {
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const [form, setForm] = useState<FormState>(() => emptyForm());
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [newDetail, setNewDetail] = useState("");
 
   const saving = createProduct.isLoading || updateProduct.isLoading;
 
-  if (isLoading) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const stats = useMemo(() => {
+    const total = productsSafe.length;
+    const active = productsSafe.filter((p) => !!p.is_active).length;
+    return { total, active };
+  }, [productsSafe]);
 
   const openCreate = () => {
     setEditingProduct(null);
@@ -85,16 +82,23 @@ export default function AdminProducts() {
 
   const openEdit = (p: Product) => {
     setEditingProduct(p);
+
+    const baseMin =
+      Number((p as any)?.base_price_min ?? (p as any)?.basePriceMin ?? p.price ?? 0) || 0;
+
+    const detailsArr = Array.isArray((p as any)?.details) ? (p as any).details : [];
+
     setForm({
       name: p.name ?? "",
       slug: p.slug ?? "",
       description: String(p.description ?? ""),
       category: String(p.category ?? "natural-wigs"),
-      base_price_min: Number(p.base_price_min ?? p.price ?? 0),
+      base_price_min: baseMin,
       original_price: p.original_price != null ? Number(p.original_price) : null,
       is_active: p.is_active ?? true,
-      details: Array.isArray(p.details) ? p.details : [],
+      details: detailsArr,
     });
+
     setNewDetail("");
     setShowForm(true);
   };
@@ -119,6 +123,7 @@ export default function AdminProducts() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
 
     const name = form.name.trim();
     if (!name) return;
@@ -133,7 +138,7 @@ export default function AdminProducts() {
         category: form.category || null,
         base_price_min: Number(form.base_price_min ?? 0) as any,
         original_price: form.original_price != null ? (Number(form.original_price) as any) : null,
-        is_active: form.is_active,
+        is_active: !!form.is_active,
         details: (form.details ?? []) as any,
         updated_at: new Date().toISOString(),
       };
@@ -142,7 +147,7 @@ export default function AdminProducts() {
       if (!updated) return;
 
       closeForm();
-      refetch();
+      refetch?.();
       return;
     }
 
@@ -153,7 +158,7 @@ export default function AdminProducts() {
       category: form.category || null,
       base_price_min: Number(form.base_price_min ?? 0) as any,
       original_price: form.original_price != null ? (Number(form.original_price) as any) : null,
-      is_active: form.is_active,
+      is_active: !!form.is_active,
       details: (form.details ?? []) as any,
     };
 
@@ -161,57 +166,131 @@ export default function AdminProducts() {
     if (!created) return;
 
     closeForm();
-    refetch();
+    refetch?.();
   };
 
-  const handleDelete = async (id: ID) => {
+  const handleDelete = async (id: any) => {
     if (!confirm("Supprimer ce produit ?")) return;
-    const ok = await deleteProduct.delete(id);
-    if (ok) refetch();
+    const ok = await deleteProduct.delete(id as ID);
+    if (ok) refetch?.();
   };
-
-  const stats = useMemo(() => {
-    const total = products?.length ?? 0;
-    const active = (products ?? []).filter((p) => p.is_active).length;
-    return { total, active };
-  }, [products]);
 
   return (
-    <div className="space-y-6">
-      {/* Title + actions */}
-      <div className="flex items-center justify-between">
+    <div className="p-6 bg-card rounded-xl shadow-card">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Package className="h-6 w-6 text-primary" />
-          <h2 className="font-serif text-2xl font-bold">Produits</h2>
-          <span className="text-muted-foreground">
+          <Package className="h-5 w-5 text-primary" />
+          <h2 className="font-serif text-xl font-semibold">Produits (Admin)</h2>
+          <span className="text-sm text-muted-foreground">
             ({stats.total} / actifs: {stats.active})
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={refetch}>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => refetch?.()} disabled={isLoading || saving}>
             Rafraîchir
           </Button>
-          <Button onClick={openCreate} variant="hero">
+          <Button variant="hero" onClick={openCreate} disabled={saving}>
             <Plus className="h-4 w-4 mr-2" />
-            Nouveau produit
+            Nouveau
           </Button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">{error}</div>
+        <div className="mt-4 bg-destructive/10 text-destructive text-sm p-3 rounded-lg">
+          {String(error)}
+        </div>
       )}
 
-      {/* Modal */}
+      {isLoading ? (
+        <div className="mt-6 flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Chargement...
+        </div>
+      ) : (
+        <div className="mt-6 bg-background rounded-xl border border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="text-left p-3">Nom</th>
+                  <th className="text-left p-3">Catégorie</th>
+                  <th className="text-left p-3">Prix</th>
+                  <th className="text-left p-3">Statut</th>
+                  <th className="text-left p-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productsSafe.map((p) => (
+                  <tr key={String(p.id)} className="border-t border-border">
+                    <td className="p-3">
+                      <div className="font-medium">{p.name}</div>
+                      <div className="text-xs text-muted-foreground">{p.slug}</div>
+                    </td>
+                    <td className="p-3 text-muted-foreground">
+                      {categories?.find((c) => c.id === p.category)?.name ?? p.category ?? "-"}
+                    </td>
+                    <td className="p-3">
+                      <div className="font-medium">{formatPrice(p.price)}</div>
+                      {p.original_price != null && (
+                        <div className="text-xs text-muted-foreground line-through">
+                          {formatPrice(Number(p.original_price))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <span className={p.is_active ? "text-green-600" : "text-red-600"}>
+                        {p.is_active ? "Actif" : "Inactif"}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => openEdit(p)} disabled={saving}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={() => handleDelete(p.id)}
+                          disabled={saving}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {productsSafe.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-muted-foreground">
+                      Aucun produit. Clique sur “Nouveau”.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center overflow-y-auto py-8">
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center overflow-y-auto py-8"
+          onMouseDown={(e) => {
+            // ferme si clic sur le backdrop
+            if (e.target === e.currentTarget) closeForm();
+          }}
+        >
           <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl mx-4 p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-serif text-xl font-bold">
                 {editingProduct ? "Modifier le produit" : "Nouveau produit"}
               </h3>
-              <button onClick={closeForm} className="text-muted-foreground hover:text-foreground">
+              <button onClick={closeForm} className="text-muted-foreground hover:text-foreground" type="button">
                 <X className="h-6 w-6" />
               </button>
             </div>
@@ -233,7 +312,7 @@ export default function AdminProducts() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Slug (auto si vide)</label>
+                <label className="block text-sm font-medium mb-2">Slug</label>
                 <Input
                   value={form.slug}
                   onChange={(e) => setForm((p) => ({ ...p, slug: slugify(e.target.value) }))}
@@ -296,7 +375,7 @@ export default function AdminProducts() {
                   checked={form.is_active}
                   onCheckedChange={(checked) => setForm((p) => ({ ...p, is_active: checked }))}
                 />
-                <span className="text-sm">Produit actif (visible en boutique)</span>
+                <span className="text-sm">Produit actif</span>
               </div>
 
               <div>
@@ -321,7 +400,7 @@ export default function AdminProducts() {
                 <div className="flex flex-wrap gap-2">
                   {(form.details ?? []).map((d, idx) => (
                     <span
-                      key={idx}
+                      key={`${d}-${idx}`}
                       className="bg-muted px-3 py-1 rounded-full text-sm flex items-center gap-2"
                     >
                       {d}
@@ -334,7 +413,7 @@ export default function AdminProducts() {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={closeForm} className="flex-1">
+                <Button type="button" variant="outline" onClick={closeForm} className="flex-1" disabled={saving}>
                   Annuler
                 </Button>
                 <Button type="submit" variant="hero" className="flex-1" disabled={saving}>
@@ -350,76 +429,6 @@ export default function AdminProducts() {
           </div>
         </div>
       )}
-
-      {/* Table */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left p-4 font-medium">Nom</th>
-                <th className="text-left p-4 font-medium">Catégorie</th>
-                <th className="text-left p-4 font-medium">Prix affiché</th>
-                <th className="text-left p-4 font-medium">Statut</th>
-                <th className="text-left p-4 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(products ?? []).map((p) => (
-                <tr key={p.id} className="border-t border-border hover:bg-muted/30">
-                  <td className="p-4">
-                    <div className="font-medium">{p.name}</div>
-                    <div className="text-xs text-muted-foreground">{p.slug}</div>
-                  </td>
-                  <td className="p-4 text-muted-foreground">
-                    {categories.find((c) => c.id === p.category)?.name ?? p.category ?? "-"}
-                  </td>
-                  <td className="p-4">
-                    <div className="font-medium">{formatPrice(p.price)}</div>
-                    {p.original_price != null && (
-                      <div className="text-xs text-muted-foreground line-through">
-                        {formatPrice(Number(p.original_price))}
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <span className={p.is_active ? "text-green-600" : "text-red-600"}>
-                      {p.is_active ? "Actif" : "Inactif"}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openEdit(p)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                        onClick={() => handleDelete(p.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {(!products || products.length === 0) && (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                    Aucun produit. Clique sur “Nouveau produit”.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="text-xs text-muted-foreground">
-        Astuce: utilise ensuite “AdminCatalog” pour gérer couleurs/images/variantes des produits.
-      </div>
     </div>
   );
 }

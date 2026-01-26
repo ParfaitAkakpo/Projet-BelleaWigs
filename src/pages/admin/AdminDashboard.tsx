@@ -1,5 +1,6 @@
+// src/pages/admin/AdminDashboard.tsx
 import { useState } from "react";
-import AdminProducts from "./AdminProducts";
+import AdminProductsPanel from "./AdminProductsPanel";
 import AdminCatalog from "./AdminCatalog";
 import { Button } from "@/components/ui/button";
 
@@ -15,6 +16,7 @@ export default function AdminDashboard() {
         >
           Produits
         </Button>
+
         <Button
           variant={tab === "catalog" ? "default" : "outline"}
           onClick={() => setTab("catalog")}
@@ -23,7 +25,7 @@ export default function AdminDashboard() {
         </Button>
       </div>
 
-      {tab === "products" ? <AdminProducts /> : <AdminCatalog />}
+      {tab === "products" ? <AdminProductsPanel /> : <AdminCatalog />}
     </div>
   );
 }

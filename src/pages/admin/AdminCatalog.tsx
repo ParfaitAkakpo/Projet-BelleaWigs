@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+// src/pages/admin/AdminCatalog.tsx
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, LogOut, Plus, Trash2, Check } from "lucide-react";
 
@@ -9,8 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { useAdmin } from "@/hooks/useAdmin";
 import { formatPrice } from "@/lib/formatPrice";
 
-// ✅ Admin products: idéalement utilise useProductsAdmin (tous les produits)
-import { useProducts } from "@/hooks/useProducts";
+// ✅ IMPORTANT: admin = tous les produits (actifs + inactifs)
+import { useProductsAdmin } from "@/hooks/useProducts";
 
 import {
   useColors,
@@ -32,24 +33,37 @@ export default function AdminCatalog() {
   const navigate = useNavigate();
   const { user, isAdmin, loading: authLoading, signOut } = useAdmin();
 
-  const { data: products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
+  const {
+    data: products,
+    isLoading: productsLoading,
+    refetch: refetchProducts,
+    error: productsError,
+  } = useProductsAdmin();
+
+  const productsSafe = Array.isArray(products) ? products : [];
 
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
 
   const { data: colors } = useColors();
   const { data: lengths } = useLengths();
 
-  const { data: productColors, isLoading: pcLoading, refetch: refetchPC } = useProductColors(selectedProductId ?? undefined);
+  const { data: productColors, isLoading: pcLoading, refetch: refetchPC } =
+    useProductColors(selectedProductId ?? undefined);
+
   const createProductColor = useCreateProductColor();
   const setDefaultColor = useSetDefaultProductColor();
   const deleteProductColor = useDeleteProductColor();
 
   const [selectedProductColorId, setSelectedProductColorId] = useState<number | null>(null);
-  const { data: colorImages, isLoading: imgLoading, refetch: refetchImgs } = useProductColorImages(selectedProductColorId ?? undefined);
+  const { data: colorImages, isLoading: imgLoading, refetch: refetchImgs } =
+    useProductColorImages(selectedProductColorId ?? undefined);
+
   const addColorImage = useAddProductColorImage();
   const deleteColorImage = useDeleteProductColorImage();
 
-  const { data: variants, isLoading: vLoading, refetch: refetchVariants } = useVariants(selectedProductId ?? undefined);
+  const { data: variants, isLoading: vLoading, refetch: refetchVariants } =
+    useVariants(selectedProductId ?? undefined);
+
   const createVariant = useCreateVariant();
   const updateVariant = useUpdateVariant();
   const deleteVariant = useDeleteVariant();
@@ -66,11 +80,11 @@ export default function AdminCatalog() {
     is_active: true,
   });
 
-  // redirect si pas admin
-  if (!authLoading && (!user || !isAdmin)) {
-    navigate("/admin/login");
-    return null;
-  }
+  // ✅ REDIRECT SAFE (PAS de navigate() dans le render)
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || !isAdmin) navigate("/admin/login");
+  }, [authLoading, user, isAdmin, navigate]);
 
   const loading = authLoading || productsLoading;
   if (loading) {
@@ -86,10 +100,10 @@ export default function AdminCatalog() {
     navigate("/admin/login");
   };
 
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === selectedProductId) ?? null,
-    [products, selectedProductId]
-  );
+  const selectedProduct = useMemo(() => {
+    if (!selectedProductId) return null;
+    return productsSafe.find((p: any) => Number(p.id) === Number(selectedProductId)) ?? null;
+  }, [productsSafe, selectedProductId]);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -116,17 +130,25 @@ export default function AdminCatalog() {
             </Button>
           </div>
 
+          {productsError && (
+            <div className="mb-3 text-sm text-destructive bg-destructive/10 p-2 rounded">
+              {String(productsError)}
+            </div>
+          )}
+
           <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
-            {products.map((p) => (
+            {productsSafe.map((p: any) => (
               <button
                 key={p.id}
                 onClick={() => {
-                  setSelectedProductId(p.id);
+                  setSelectedProductId(Number(p.id));
                   setSelectedProductColorId(null);
                 }}
                 className={[
                   "w-full text-left p-3 rounded-lg border",
-                  selectedProductId === p.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30",
+                  Number(selectedProductId) === Number(p.id)
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:bg-muted/30",
                 ].join(" ")}
               >
                 <div className="font-medium">{p.name}</div>
@@ -134,6 +156,10 @@ export default function AdminCatalog() {
                 <div className="text-xs mt-1">{formatPrice(p.price)}</div>
               </button>
             ))}
+
+            {productsSafe.length === 0 && (
+              <div className="text-sm text-muted-foreground">Aucun produit.</div>
+            )}
           </div>
         </div>
 
@@ -161,12 +187,13 @@ export default function AdminCatalog() {
                       onChange={(e) => setNewColorId(e.target.value ? Number(e.target.value) : "")}
                     >
                       <option value="">Choisir une couleur…</option>
-                      {colors.map((c) => (
+                      {(colors ?? []).map((c: any) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
                         </option>
                       ))}
                     </select>
+
                     <Button
                       onClick={async () => {
                         if (!selectedProductId || !newColorId) return;
@@ -190,7 +217,7 @@ export default function AdminCatalog() {
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <div className="space-y-2">
-                    {productColors.map((pc) => (
+                    {(productColors ?? []).map((pc: any) => (
                       <div
                         key={pc.id}
                         className={[
@@ -198,12 +225,9 @@ export default function AdminCatalog() {
                           selectedProductColorId === pc.id ? "border-primary bg-primary/5" : "border-border",
                         ].join(" ")}
                       >
-                        <button
-                          className="text-left flex-1"
-                          onClick={() => setSelectedProductColorId(pc.id)}
-                        >
-                          <div className="font-medium">{pc.color.name}</div>
-                          <div className="text-xs text-muted-foreground">{pc.color.hex_code}</div>
+                        <button className="text-left flex-1" onClick={() => setSelectedProductColorId(pc.id)}>
+                          <div className="font-medium">{pc.color?.name ?? "-"}</div>
+                          <div className="text-xs text-muted-foreground">{pc.color?.hex_code ?? "-"}</div>
                         </button>
 
                         <div className="flex items-center gap-2">
@@ -214,6 +238,8 @@ export default function AdminCatalog() {
                               if (!selectedProductId) return;
                               await setDefaultColor.setDefault(selectedProductId, pc.id);
                               refetchPC();
+                              refetchVariants();
+                              refetchProducts();
                             }}
                           >
                             <Check className="h-4 w-4 mr-2" />
@@ -229,6 +255,7 @@ export default function AdminCatalog() {
                               if (selectedProductColorId === pc.id) setSelectedProductColorId(null);
                               refetchPC();
                               refetchVariants();
+                              refetchProducts();
                             }}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -237,16 +264,14 @@ export default function AdminCatalog() {
                       </div>
                     ))}
 
-                    {productColors.length === 0 && (
-                      <div className="text-sm text-muted-foreground">
-                        Aucune couleur liée à ce produit.
-                      </div>
+                    {(productColors ?? []).length === 0 && (
+                      <div className="text-sm text-muted-foreground">Aucune couleur liée à ce produit.</div>
                     )}
                   </div>
                 )}
               </section>
 
-              {/* IMAGES for selected color */}
+              {/* IMAGES */}
               <section className="border border-border rounded-xl p-4">
                 <div className="font-medium mb-3">Images (par couleur)</div>
 
@@ -272,10 +297,11 @@ export default function AdminCatalog() {
                           await addColorImage.add({
                             product_color_id: selectedProductColorId,
                             image_url: url,
-                            position: colorImages.length,
+                            position: (colorImages ?? []).length,
                           });
                           setNewImageUrl("");
                           refetchImgs();
+                          refetchProducts();
                         }}
                       >
                         <Plus className="h-4 w-4 mr-2" />
@@ -284,7 +310,7 @@ export default function AdminCatalog() {
                     </div>
 
                     <div className="flex flex-wrap gap-3">
-                      {colorImages.map((img) => (
+                      {(colorImages ?? []).map((img: any) => (
                         <div key={img.id} className="relative w-24 h-24 border rounded-lg overflow-hidden">
                           <img src={img.image_url} alt="" className="w-full h-full object-cover" />
                           <button
@@ -292,6 +318,7 @@ export default function AdminCatalog() {
                             onClick={async () => {
                               await deleteColorImage.remove(img.id);
                               refetchImgs();
+                              refetchProducts();
                             }}
                           >
                             X
@@ -300,7 +327,7 @@ export default function AdminCatalog() {
                       ))}
                     </div>
 
-                    {colorImages.length === 0 && (
+                    {(colorImages ?? []).length === 0 && (
                       <div className="text-sm text-muted-foreground">Aucune image pour cette couleur.</div>
                     )}
                   </div>
@@ -311,19 +338,21 @@ export default function AdminCatalog() {
               <section className="border border-border rounded-xl p-4">
                 <div className="font-medium mb-3">Variantes (couleur + longueur)</div>
 
-                {/* Create variant */}
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end mb-4">
                   <div className="md:col-span-2">
                     <label className="text-xs text-muted-foreground">Couleur</label>
                     <select
                       className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
                       value={variantForm.product_color_id || ""}
-                      onChange={(e) => setVariantForm((p) => ({ ...p, product_color_id: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setVariantForm((p) => ({ ...p, product_color_id: Number(e.target.value) }))
+                      }
                     >
                       <option value="">Choisir…</option>
-                      {productColors.map((pc) => (
+                      {(productColors ?? []).map((pc: any) => (
                         <option key={pc.id} value={pc.id}>
-                          {pc.color.name}{pc.is_default ? " (default)" : ""}
+                          {pc.color?.name ?? pc.id}
+                          {pc.is_default ? " (default)" : ""}
                         </option>
                       ))}
                     </select>
@@ -334,12 +363,15 @@ export default function AdminCatalog() {
                     <select
                       className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
                       value={variantForm.length_id || ""}
-                      onChange={(e) => setVariantForm((p) => ({ ...p, length_id: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setVariantForm((p) => ({ ...p, length_id: Number(e.target.value) }))
+                      }
                     >
                       <option value="">Choisir…</option>
-                      {lengths.map((l) => (
+                      {(lengths ?? []).map((l: any) => (
                         <option key={l.id} value={l.id}>
-                          {l.value}{l.unit ? ` ${l.unit}` : ""}
+                          {l.value}
+                          {l.unit ? ` ${l.unit}` : ""}
                         </option>
                       ))}
                     </select>
@@ -405,6 +437,7 @@ export default function AdminCatalog() {
                         });
 
                         refetchVariants();
+                        refetchProducts();
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
@@ -413,7 +446,6 @@ export default function AdminCatalog() {
                   </div>
                 </div>
 
-                {/* List variants */}
                 {vLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
@@ -430,14 +462,16 @@ export default function AdminCatalog() {
                         </tr>
                       </thead>
                       <tbody>
-                        {variants.map((v) => {
-                          const pc = productColors.find((x) => x.id === v.product_color_id);
-                          const len = lengths.find((l) => l.id === v.length_id);
+                        {(variants ?? []).map((v: any) => {
+                          const pc = (productColors ?? []).find((x: any) => x.id === v.product_color_id);
+                          const len = (lengths ?? []).find((l: any) => l.id === v.length_id);
 
                           return (
                             <tr key={v.id} className="border-t">
-                              <td className="p-2">{pc?.color.name ?? v.product_color_id}</td>
-                              <td className="p-2">{len ? `${len.value}${len.unit ? ` ${len.unit}` : ""}` : v.length_id}</td>
+                              <td className="p-2">{pc?.color?.name ?? v.product_color_id}</td>
+                              <td className="p-2">
+                                {len ? `${len.value}${len.unit ? ` ${len.unit}` : ""}` : v.length_id}
+                              </td>
                               <td className="p-2">{formatPrice(Number(v.price))}</td>
                               <td className="p-2">{v.stock ?? 0}</td>
                               <td className="p-2">
@@ -446,6 +480,7 @@ export default function AdminCatalog() {
                                   onCheckedChange={async (checked) => {
                                     await updateVariant.update(v.id, { is_active: checked });
                                     refetchVariants();
+                                    refetchProducts();
                                   }}
                                 />
                               </td>
@@ -458,6 +493,7 @@ export default function AdminCatalog() {
                                     if (!confirm("Supprimer cette variante ?")) return;
                                     await deleteVariant.remove(v.id);
                                     refetchVariants();
+                                    refetchProducts();
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -467,7 +503,7 @@ export default function AdminCatalog() {
                           );
                         })}
 
-                        {variants.length === 0 && (
+                        {(variants ?? []).length === 0 && (
                           <tr>
                             <td colSpan={6} className="p-4 text-muted-foreground">
                               Aucune variante.
@@ -481,10 +517,24 @@ export default function AdminCatalog() {
               </section>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { refetchPC(); refetchImgs(); refetchVariants(); }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    refetchPC();
+                    refetchImgs();
+                    refetchVariants();
+                    refetchProducts();
+                  }}
+                >
                   Rafraîchir sections
                 </Button>
-                <Button variant="outline" onClick={() => { setSelectedProductId(null); setSelectedProductColorId(null); }}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedProductId(null);
+                    setSelectedProductColorId(null);
+                  }}
+                >
                   Désélectionner
                 </Button>
               </div>

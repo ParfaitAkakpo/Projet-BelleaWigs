@@ -9,7 +9,6 @@ export type ProductUpdate = Database["public"]["Tables"]["product"]["Update"];
 // ---- Helpers ----
 
 function getProductDisplayPrice(row: Database["public"]["Tables"]["product"]["Row"]): number {
-  // ✅ règle : prix boutique = base_price_min si variantes, sinon original_price si pas de variantes, sinon 0
   const bpm = row.base_price_min;
   if (typeof bpm === "number") return bpm;
 
@@ -36,31 +35,68 @@ function normalizeProduct(
     base_price_min: row.base_price_min ?? null,
     original_price: row.original_price ?? null,
 
-    // ✅ champ UI (pas en DB)
+    // champ UI
     price: getProductDisplayPrice(row),
 
-    // ✅ image boutique (view product_default_media)
+    // image boutique (view product_default_media)
     image_url: defaultImageUrl,
 
-    // optionnel
     details: Array.isArray((row as any)?.details) ? (row as any).details : [],
     images: undefined,
     variants: undefined,
   };
 }
 
+/**
+ * 🔧 Fetcher commun (admin/boutique)
+ */
+async function fetchProductsCore(opts: { onlyActive: boolean }) {
+  const { onlyActive } = opts;
+
+  let q = supabase
+    .from("product")
+    .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price,details")
+    .order("created_at", { ascending: false });
+
+  if (onlyActive) q = q.eq("is_active", true);
+
+  const { data: productRows, error: pErr } = await q;
+
+  if (pErr) throw pErr;
+
+  const productIds = (productRows ?? []).map((p) => p.id);
+
+  // default medias
+  let defaultMediaMap = new Map<number, string | null>();
+
+  if (productIds.length > 0) {
+    const { data: mediaRows, error: mErr } = await supabase
+      .from("product_default_media")
+      .select("product_id,image_url")
+      .in("product_id", productIds);
+
+    if (mErr) throw mErr;
+
+    defaultMediaMap = new Map<number, string | null>(
+      (mediaRows ?? []).map((r: any) => [Number(r.product_id), (r.image_url ?? null) as string | null])
+    );
+  }
+
+  return (productRows ?? []).map((row) =>
+    normalizeProduct(row, defaultMediaMap.get(Number(row.id)) ?? null)
+  );
+}
+
 // ---- Hooks ----
 
 /**
- * ✅ Liste des produits actifs + image par défaut via view product_default_media
- * - 2 requêtes rapides (products + default_media) puis merge
+ * ✅ Boutique: produits ACTIFS seulement
  */
 export function useProducts() {
   const [data, setData] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ évite setState après unmount (et évite les effets “abort” masqués)
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -69,65 +105,19 @@ export function useProducts() {
     };
   }, []);
 
-  const fetchProducts = useCallback(async () => {
+  const refetch = useCallback(async () => {
     try {
       if (mountedRef.current) {
         setIsLoading(true);
         setError(null);
       }
-      
 
-      // 1) produits
-      const { data: productRows, error: pErr } = await supabase
-        .from("product")
-        .select("id,name,slug,description,category,is_active,created_at,updated_at,base_price_min,original_price,details")
-        .order("created_at", { ascending: false });
-
-      if (pErr) {
-        console.error("Supabase product error:", pErr);
-        if (mountedRef.current) {
-          setError(pErr.message);
-          setData([]);
-        }
-        return;
-      }
-
-      const productIds = (productRows ?? []).map((p) => p.id);
-
-      // 2) images par défaut (1 image par produit)
-      // si aucun produit, on évite l'appel inutile
-      let defaultMediaMap = new Map<number, string | null>();
-
-      if (productIds.length > 0) {
-        const { data: mediaRows, error: mErr } = await supabase
-          .from("product_default_media")
-          .select("product_id,image_url")
-          .in("product_id", productIds);
-
-        if (mErr) {
-          console.error("Supabase default media error:", mErr);
-          if (mountedRef.current) {
-            setError(mErr.message);
-            setData([]);
-          }
-          return;
-        }
-
-        defaultMediaMap = new Map<number, string | null>(
-          (mediaRows ?? []).map((r: any) => [Number(r.product_id), (r.image_url ?? null) as string | null])
-        );
-      }
-
-      // 3) merge
-      const normalized = (productRows ?? []).map((row) =>
-        normalizeProduct(row, defaultMediaMap.get(Number(row.id)) ?? null)
-      );
-
+      const normalized = await fetchProductsCore({ onlyActive: true });
       if (mountedRef.current) setData(normalized);
-    } catch (err) {
-      console.error("useProducts fetchProducts exception:", err);
+    } catch (err: any) {
+      console.error("useProducts error:", err);
       if (mountedRef.current) {
-        setError(err instanceof Error ? err.message : "Erreur inconnue");
+        setError(err?.message ?? "Erreur inconnue");
         setData([]);
       }
     } finally {
@@ -135,22 +125,68 @@ export function useProducts() {
     }
   }, []);
 
-  // ✅ remplace l'ancien useEffect par une version “safe”
   useEffect(() => {
     let cancelled = false;
-
     const run = async () => {
-      if (!cancelled) await fetchProducts();
+      if (!cancelled) await refetch();
     };
-
     run();
-
     return () => {
       cancelled = true;
     };
-  }, [fetchProducts]);
+  }, [refetch]);
 
-  return { data, isLoading, error, refetch: fetchProducts };
+  return { data, isLoading, error, refetch };
+}
+
+/**
+ * ✅ Admin: tous les produits (actifs + inactifs)
+ */
+export function useProductsAdmin() {
+  const [data, setData] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const refetch = useCallback(async () => {
+    try {
+      if (mountedRef.current) {
+        setIsLoading(true);
+        setError(null);
+      }
+
+      const normalized = await fetchProductsCore({ onlyActive: false });
+      if (mountedRef.current) setData(normalized);
+    } catch (err: any) {
+      console.error("useProductsAdmin error:", err);
+      if (mountedRef.current) {
+        setError(err?.message ?? "Erreur inconnue");
+        setData([]);
+      }
+    } finally {
+      if (mountedRef.current) setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) await refetch();
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [refetch]);
+
+  return { data, isLoading, error, refetch };
 }
 
 /**
@@ -176,10 +212,9 @@ export function useCreateProduct() {
         return null;
       }
 
-      // image default inconnue ici -> null (sera résolue au refresh)
       return normalizeProduct(data, null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue");
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur inconnue");
       return null;
     } finally {
       setIsLoading(false);
@@ -214,8 +249,8 @@ export function useUpdateProduct() {
       }
 
       return normalizeProduct(data, null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue");
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur inconnue");
       return null;
     } finally {
       setIsLoading(false);
@@ -246,8 +281,8 @@ export function useDeleteProduct() {
       }
 
       return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue");
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur inconnue");
       return false;
     } finally {
       setIsLoading(false);
@@ -322,8 +357,8 @@ export function useProductVariants(productId?: ID) {
         });
 
         if (!cancelled) setData(formatted);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Erreur inconnue");
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message ?? "Erreur inconnue");
       } finally {
         if (!cancelled) setIsLoading(false);
       }
