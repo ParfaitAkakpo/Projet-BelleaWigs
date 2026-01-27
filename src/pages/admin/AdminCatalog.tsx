@@ -80,7 +80,15 @@ export default function AdminCatalog() {
     is_active: true,
   });
 
-  // ✅ REDIRECT SAFE (PAS de navigate() dans le render)
+ 
+
+
+const selectedProduct = useMemo(() => {
+    if (!selectedProductId) return null;
+    return productsSafe.find((p: any) => Number(p.id) === Number(selectedProductId)) ?? null;
+  }, [productsSafe, selectedProductId]);
+
+   // ✅ REDIRECT SAFE (PAS de navigate() dans le render)
   useEffect(() => {
     if (authLoading) return;
     if (!user || !isAdmin) navigate("/admin/login");
@@ -100,10 +108,7 @@ export default function AdminCatalog() {
     navigate("/admin/login");
   };
 
-  const selectedProduct = useMemo(() => {
-    if (!selectedProductId) return null;
-    return productsSafe.find((p: any) => Number(p.id) === Number(selectedProductId)) ?? null;
-  }, [productsSafe, selectedProductId]);
+  
 
   return (
     <div className="min-h-screen bg-muted/30">
