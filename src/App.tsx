@@ -6,6 +6,9 @@ import { CartProvider } from "@/contexts/CartContext";
 import Layout from "@/components/layout/Layout";
 import RequireAdmin from "@/components/auth/RequireAdmin";
 
+import { HelmetProvider } from "react-helmet-async";
+import RouteSEO from "@/components/seo/RouteSEO";
+
 import PaymentReturn from "./pages/PaymentReturn";
 import Payment from "./pages/payment";
 
@@ -31,51 +34,56 @@ import FAQ from "@/pages/FAQ";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <CartProvider>
-      <TooltipProvider>
-        <Sonner />
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <Layout>
-            <Routes>
-              {/* Public */}
-              <Route path="/" element={<Index />} />
-              <Route path="/shop" element={<Shop />} />
-              <Route path="/product/:id" element={<ProductDetail />} />
-              <Route path="/cart" element={<Cart />} />
-              <Route path="/checkout" element={<Checkout />} />
+  <HelmetProvider>
+    <QueryClientProvider client={queryClient}>
+      <CartProvider>
+        <TooltipProvider>
+          <Sonner />
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            {/* ✅ SEO global par route */}
+            <RouteSEO />
 
-              <Route path="/payment" element={<Payment />} />
-              <Route path="/payment/return" element={<PaymentReturn />} />
+            <Layout>
+              <Routes>
+                {/* Public */}
+                <Route path="/" element={<Index />} />
+                <Route path="/shop" element={<Shop />} />
+                <Route path="/product/:id" element={<ProductDetail />} />
+                <Route path="/cart" element={<Cart />} />
+                <Route path="/checkout" element={<Checkout />} />
 
-              <Route path="/order-confirmation" element={<OrderConfirmation />} />
-              <Route path="/account" element={<Account />} />
-              <Route path="/livraison" element={<Livraison />} />
-              <Route path="/retours-remboursements" element={<Retours />} />
-              <Route path="/guide-tailles" element={<GuideTailles />} />
-              <Route path="/entretien" element={<EntretienPerruques />} />
-              <Route path="/faq" element={<FAQ />} />
+                <Route path="/payment" element={<Payment />} />
+                <Route path="/payment/return" element={<PaymentReturn />} />
 
-              {/* Admin login (non protégé) */}
-              <Route path="/admin/login" element={<AdminLogin />} />
+                <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                <Route path="/account" element={<Account />} />
+                <Route path="/livraison" element={<Livraison />} />
+                <Route path="/retours-remboursements" element={<Retours />} />
+                <Route path="/guide-tailles" element={<GuideTailles />} />
+                <Route path="/entretien" element={<EntretienPerruques />} />
+                <Route path="/faq" element={<FAQ />} />
 
-              {/* Admin protégé */}
-              <Route element={<RequireAdmin />}>
-                <Route path="/admin">
-                  <Route index element={<AdminDashboard />} />
-                  <Route path="products" element={<AdminProducts />} />
-                  <Route path="catalog" element={<AdminCatalog />} />
+                {/* Admin login (non protégé) */}
+                <Route path="/admin/login" element={<AdminLogin />} />
+
+                {/* Admin protégé */}
+                <Route element={<RequireAdmin />}>
+                  <Route path="/admin">
+                    <Route index element={<AdminDashboard />} />
+                    <Route path="products" element={<AdminProducts />} />
+                    <Route path="catalog" element={<AdminCatalog />} />
+                  </Route>
                 </Route>
-              </Route>
 
-              {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Layout>
-        </BrowserRouter>
-      </TooltipProvider>
-    </CartProvider>
-  </QueryClientProvider>
+                {/* 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Layout>
+          </BrowserRouter>
+        </TooltipProvider>
+      </CartProvider>
+    </QueryClientProvider>
+  </HelmetProvider>
 );
 
 export default App;

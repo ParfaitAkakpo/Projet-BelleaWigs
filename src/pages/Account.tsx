@@ -98,6 +98,21 @@ export default function Account() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // IDs stables (pour labels + autofill)
+  const ids = {
+    profileFullName: "profile_full_name",
+    profileEmail: "profile_email",
+    profileCountry: "profile_country",
+    profilePhone: "profile_phone",
+
+    authFullName: "auth_full_name",
+    authCountry: "auth_country",
+    authPhone: "auth_phone",
+    authEmail: "auth_email",
+    authPassword: "auth_password",
+    authConfirmPassword: "auth_confirm_password",
+  } as const;
+
   // session listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
@@ -175,7 +190,6 @@ export default function Account() {
   useEffect(() => {
     if (!isLoggedIn) return;
     if (!isAdmin) return;
-    // si tu veux arriver direct sur admin_products :
     // setActiveTab("admin_products");
   }, [isLoggedIn, isAdmin]);
 
@@ -405,18 +419,35 @@ export default function Account() {
 
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-2 sm:col-span-2">
-                      <Label>Nom complet</Label>
-                      <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                      <Label htmlFor={ids.profileFullName}>Nom complet</Label>
+                      <Input
+                        id={ids.profileFullName}
+                        name="profile_full_name"
+                        autoComplete="name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                      />
                     </div>
 
                     <div className="space-y-2 sm:col-span-2">
-                      <Label>Email</Label>
-                      <Input value={email} disabled type="email" />
+                      <Label htmlFor={ids.profileEmail}>Email</Label>
+                      <Input
+                        id={ids.profileEmail}
+                        name="profile_email"
+                        autoComplete="email"
+                        inputMode="email"
+                        value={email}
+                        disabled
+                        type="email"
+                      />
                     </div>
 
                     <div className="space-y-2 sm:col-span-2">
-                      <Label>Pays</Label>
+                      <Label htmlFor={ids.profileCountry}>Pays</Label>
                       <select
+                        id={ids.profileCountry}
+                        name="profile_country"
+                        autoComplete="country-name"
                         value={country}
                         onChange={(e) => setCountry(e.target.value as Country)}
                         className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -427,12 +458,20 @@ export default function Account() {
                     </div>
 
                     <div className="space-y-2 sm:col-span-2">
-                      <Label>Téléphone</Label>
+                      <Label htmlFor={ids.profilePhone}>Téléphone</Label>
                       <div className="flex gap-2">
                         <span className="px-2 py-2 bg-muted border rounded text-sm flex items-center min-w-[56px]">
                           {phoneCodes[country]}
                         </span>
-                        <Input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" />
+                        <Input
+                          id={ids.profilePhone}
+                          name="profile_phone"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel-national"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -520,7 +559,10 @@ export default function Account() {
                                     <p className="text-sm text-muted-foreground">Aucun item trouvé.</p>
                                   ) : (
                                     orderItems.map((it, idx) => (
-                                      <div key={`${it.order_id}-${idx}`} className="flex items-center justify-between text-sm">
+                                      <div
+                                        key={`${it.order_id}-${idx}`}
+                                        className="flex items-center justify-between text-sm"
+                                      >
                                         <div className="text-muted-foreground">
                                           Produit #{it.product_id ?? "?"}
                                           {it.color || it.length ? (
@@ -590,11 +632,13 @@ export default function Account() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2">
-                <Label htmlFor="name">Nom complet</Label>
+                <Label htmlFor={ids.authFullName}>Nom complet</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="name"
+                    id={ids.authFullName}
+                    name="full_name"
+                    autoComplete="name"
                     placeholder="Votre nom"
                     className="pl-10"
                     required
@@ -607,8 +651,11 @@ export default function Account() {
 
             {!isLogin && (
               <div className="space-y-2">
-                <Label>Pays</Label>
+                <Label htmlFor={ids.authCountry}>Pays</Label>
                 <select
+                  id={ids.authCountry}
+                  name="country"
+                  autoComplete="country-name"
                   value={country}
                   onChange={(e) => setCountry(e.target.value as Country)}
                   className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -621,14 +668,17 @@ export default function Account() {
 
             {!isLogin && (
               <div className="space-y-2">
-                <Label htmlFor="phone">Téléphone</Label>
+                <Label htmlFor={ids.authPhone}>Téléphone</Label>
                 <div className="flex gap-2">
                   <span className="px-2 py-2 bg-muted border rounded text-sm flex items-center min-w-[56px]">
                     {phoneCodes[country]}
                   </span>
                   <Input
-                    id="phone"
+                    id={ids.authPhone}
+                    name="phone"
                     type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
                     placeholder="90 00 00 00"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
@@ -639,12 +689,15 @@ export default function Account() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor={ids.authEmail}>Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="email"
+                  id={ids.authEmail}
+                  name="email"
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   placeholder="votre@email.com"
                   className="pl-10"
                   required
@@ -655,12 +708,14 @@ export default function Account() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
+              <Label htmlFor={ids.authPassword}>Mot de passe</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="password"
+                  id={ids.authPassword}
+                  name="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                   placeholder="••••••••"
                   className="pl-10 pr-10"
                   required
@@ -669,6 +724,7 @@ export default function Account() {
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
@@ -679,14 +735,19 @@ export default function Account() {
 
             {!isLogin && (
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
+                <Label htmlFor={ids.authConfirmPassword}>Confirmer le mot de passe</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="confirmPassword"
+                    id={ids.authConfirmPassword}
+                    name="confirm_password"
                     type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
                     placeholder="••••••••"
-                    className={cn("pl-10 pr-10", passwordError && "border-destructive focus-visible:ring-destructive")}
+                    className={cn(
+                      "pl-10 pr-10",
+                      passwordError && "border-destructive focus-visible:ring-destructive"
+                    )}
                     required
                     value={confirmPassword}
                     onChange={(e) => {
@@ -696,6 +757,7 @@ export default function Account() {
                   />
                   <button
                     type="button"
+                    aria-label={showConfirmPassword ? "Masquer la confirmation" : "Afficher la confirmation"}
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
@@ -716,7 +778,11 @@ export default function Account() {
             <span className="text-muted-foreground">
               {isLogin ? "Pas encore de compte?" : "Déjà un compte?"}
             </span>{" "}
-            <button type="button" onClick={handleToggleMode} className="text-primary font-medium hover:underline">
+            <button
+              type="button"
+              onClick={handleToggleMode}
+              className="text-primary font-medium hover:underline"
+            >
               {isLogin ? "S'inscrire" : "Se connecter"}
             </button>
           </div>

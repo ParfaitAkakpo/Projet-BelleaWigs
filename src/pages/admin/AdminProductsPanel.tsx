@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   useProductsAdmin,
   useCreateProduct,
@@ -72,6 +73,19 @@ export default function AdminProductsPanel() {
     const active = productsSafe.filter((p) => !!p.is_active).length;
     return { total, active };
   }, [productsSafe]);
+
+  // IDs stables (labels + inputs)
+  const ids = {
+    modalTitle: "admin_product_modal_title",
+    name: "admin_product_name",
+    slug: "admin_product_slug",
+    category: "admin_product_category",
+    description: "admin_product_description",
+    priceMin: "admin_product_price_min",
+    priceOriginal: "admin_product_price_original",
+    isActive: "admin_product_is_active",
+    newDetail: "admin_product_new_detail",
+  } as const;
 
   const openCreate = () => {
     setEditingProduct(null);
@@ -214,11 +228,21 @@ export default function AdminProductsPanel() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="text-left p-3">Nom</th>
-                  <th className="text-left p-3">Catégorie</th>
-                  <th className="text-left p-3">Prix</th>
-                  <th className="text-left p-3">Statut</th>
-                  <th className="text-left p-3">Actions</th>
+                  <th scope="col" className="text-left p-3">
+                    Nom
+                  </th>
+                  <th scope="col" className="text-left p-3">
+                    Catégorie
+                  </th>
+                  <th scope="col" className="text-left p-3">
+                    Prix
+                  </th>
+                  <th scope="col" className="text-left p-3">
+                    Statut
+                  </th>
+                  <th scope="col" className="text-left p-3">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -246,7 +270,13 @@ export default function AdminProductsPanel() {
                     </td>
                     <td className="p-3">
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => openEdit(p)} disabled={saving}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEdit(p)}
+                          disabled={saving}
+                          aria-label={`Modifier ${p.name}`}
+                        >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
@@ -255,6 +285,7 @@ export default function AdminProductsPanel() {
                           className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
                           onClick={() => handleDelete(p.id)}
                           disabled={saving}
+                          aria-label={`Supprimer ${p.name}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -281,24 +312,40 @@ export default function AdminProductsPanel() {
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center overflow-y-auto py-8"
           onMouseDown={(e) => {
-            // ferme si clic sur le backdrop
             if (e.target === e.currentTarget) closeForm();
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeForm();
+          }}
+          role="presentation"
         >
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl mx-4 p-6">
+          <div
+            className="bg-card rounded-2xl shadow-xl w-full max-w-2xl mx-4 p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={ids.modalTitle}
+          >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-serif text-xl font-bold">
+              <h3 id={ids.modalTitle} className="font-serif text-xl font-bold">
                 {editingProduct ? "Modifier le produit" : "Nouveau produit"}
               </h3>
-              <button onClick={closeForm} className="text-muted-foreground hover:text-foreground" type="button">
+
+              <button
+                onClick={closeForm}
+                className="text-muted-foreground hover:text-foreground"
+                type="button"
+                aria-label="Fermer"
+              >
                 <X className="h-6 w-6" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-2">Nom *</label>
+                <Label htmlFor={ids.name}>Nom *</Label>
                 <Input
+                  id={ids.name}
+                  name="name"
                   value={form.name}
                   onChange={(e) =>
                     setForm((p) => ({
@@ -308,21 +355,27 @@ export default function AdminProductsPanel() {
                     }))
                   }
                   required
+                  autoComplete="off"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Slug</label>
+                <Label htmlFor={ids.slug}>Slug</Label>
                 <Input
+                  id={ids.slug}
+                  name="slug"
                   value={form.slug}
                   onChange={(e) => setForm((p) => ({ ...p, slug: slugify(e.target.value) }))}
                   placeholder="ex: perruque-lace-bresilienne"
+                  autoComplete="off"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Catégorie</label>
+                <Label htmlFor={ids.category}>Catégorie</Label>
                 <select
+                  id={ids.category}
+                  name="category"
                   value={form.category}
                   onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
                   className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -336,8 +389,10 @@ export default function AdminProductsPanel() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Description</label>
+                <Label htmlFor={ids.description}>Description</Label>
                 <Textarea
+                  id={ids.description}
+                  name="description"
                   value={form.description}
                   onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                   rows={3}
@@ -346,24 +401,31 @@ export default function AdminProductsPanel() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Prix min</label>
+                  <Label htmlFor={ids.priceMin}>Prix min</Label>
                   <Input
+                    id={ids.priceMin}
+                    name="base_price_min"
                     type="number"
+                    inputMode="numeric"
                     value={form.base_price_min}
                     onChange={(e) =>
-                      setForm((p) => ({ ...p, base_price_min: parseInt(e.target.value) || 0 }))
+                      setForm((p) => ({ ...p, base_price_min: Number(e.target.value || 0) }))
                     }
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium mb-2">Prix original</label>
+                  <Label htmlFor={ids.priceOriginal}>Prix original</Label>
                   <Input
+                    id={ids.priceOriginal}
+                    name="original_price"
                     type="number"
+                    inputMode="numeric"
                     value={form.original_price ?? ""}
                     onChange={(e) =>
                       setForm((p) => ({
                         ...p,
-                        original_price: e.target.value ? parseInt(e.target.value) : null,
+                        original_price: e.target.value ? Number(e.target.value) : null,
                       }))
                     }
                   />
@@ -372,19 +434,25 @@ export default function AdminProductsPanel() {
 
               <div className="flex items-center gap-3">
                 <Switch
+                  id={ids.isActive}
                   checked={form.is_active}
                   onCheckedChange={(checked) => setForm((p) => ({ ...p, is_active: checked }))}
                 />
-                <span className="text-sm">Produit actif</span>
+                <Label htmlFor={ids.isActive} className="text-sm">
+                  Produit actif
+                </Label>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Détails</label>
+                <Label htmlFor={ids.newDetail}>Détails</Label>
                 <div className="flex gap-2 mb-2">
                   <Input
+                    id={ids.newDetail}
+                    name="new_detail"
                     value={newDetail}
                     onChange={(e) => setNewDetail(e.target.value)}
                     placeholder="Ex: Cheveux 100% humains"
+                    autoComplete="off"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -392,7 +460,7 @@ export default function AdminProductsPanel() {
                       }
                     }}
                   />
-                  <Button type="button" variant="outline" onClick={addDetail}>
+                  <Button type="button" variant="outline" onClick={addDetail} aria-label="Ajouter un détail">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -404,7 +472,7 @@ export default function AdminProductsPanel() {
                       className="bg-muted px-3 py-1 rounded-full text-sm flex items-center gap-2"
                     >
                       {d}
-                      <button type="button" onClick={() => removeDetail(idx)}>
+                      <button type="button" onClick={() => removeDetail(idx)} aria-label={`Retirer: ${d}`}>
                         <X className="h-3 w-3" />
                       </button>
                     </span>
@@ -413,9 +481,16 @@ export default function AdminProductsPanel() {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={closeForm} className="flex-1" disabled={saving}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeForm}
+                  className="flex-1"
+                  disabled={saving}
+                >
                   Annuler
                 </Button>
+
                 <Button type="submit" variant="hero" className="flex-1" disabled={saving}>
                   {saving ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
