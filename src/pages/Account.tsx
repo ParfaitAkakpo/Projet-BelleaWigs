@@ -1,7 +1,7 @@
 // src/pages/Account.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { User, Package, Heart, LogOut, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { User, Package, Heart, LogOut, Mail, Lock, Eye, EyeOff, ShoppingBag, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,8 +70,10 @@ type TabKey = "profile" | "orders" | "favorites" | "admin_products" | "admin_cat
 
 export default function Account() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { totalItems } = useCart();
+
+  const { addToCart } = useCart();
 
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -93,6 +95,9 @@ export default function Account() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItemRow[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
+
+  // reorder
+  const [reorderLoading, setReorderLoading] = useState<string | null>(null);
 
   // form
   const [fullName, setFullName] = useState("");
@@ -118,12 +123,6 @@ export default function Account() {
     authConfirmPassword: "auth_confirm_password",
   } as const;
 
-  const firstName = useMemo(() => {
-    const n = String(fullName ?? "").trim();
-    if (!n) return "";
-    return n.split(/\s+/)[0] ?? "";
-  }, [fullName]);
-
   // session listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
@@ -134,6 +133,14 @@ export default function Account() {
 
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // tab from query ?tab=orders etc.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const tab = (searchParams.get("tab") || "").toLowerCase();
+    const allowed: TabKey[] = ["profile", "orders", "favorites", "admin_products", "admin_catalog"];
+    if (allowed.includes(tab as TabKey)) setActiveTab(tab as TabKey);
+  }, [location.search, isLoggedIn, searchParams]);
 
   // load profile
   useEffect(() => {
@@ -197,20 +204,14 @@ export default function Account() {
 
   const isAdmin = useMemo(() => profile?.role === "admin", [profile?.role]);
 
-  // ✅ support /account?tab=orders (et autres tabs)
-  useEffect(() => {
-    if (!isLoggedIn) return;
-
-    const tab = (searchParams.get("tab") ?? "") as TabKey;
-    const allowed: TabKey[] = ["profile", "orders", "favorites", "admin_products", "admin_catalog"];
-
-    if (allowed.includes(tab)) {
-      // empêche admin tabs si pas admin
-      if (!isAdmin && (tab === "admin_products" || tab === "admin_catalog")) return;
-      if (tab !== activeTab) setActiveTab(tab);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn, searchParams, isAdmin]);
+  const displayName = useMemo(() => {
+    const raw = (profile?.full_name || "").trim();
+    if (raw) return raw.split(" ")[0]; // prénom si "Parfait AKAKPO"
+    const metaName = String(session?.user?.user_metadata?.full_name || "").trim();
+    if (metaName) return metaName.split(" ")[0];
+    const mail = String(session?.user?.email || "");
+    return mail ? mail.split("@")[0] : "👋";
+  }, [profile?.full_name, session?.user?.email, session?.user?.user_metadata]);
 
   const handleToggleMode = () => {
     setIsLogin((v) => !v);
@@ -368,6 +369,95 @@ export default function Account() {
     }
   }
 
+  // ✅ RECOMMANDER : ajoute au panier si produit/variante existent et stock > 0
+  async function reorderFromOrder(orderId: string) {
+    if (!orderId) return;
+    setReorderLoading(orderId);
+
+    try {
+      const { data: items, error: itemsErr } = await sb
+        .from("order_items")
+        .select("product_id, variant_id, quantity")
+        .eq("order_id", orderId);
+
+      if (itemsErr) throw itemsErr;
+
+      const safeItems: any[] = Array.isArray(items) ? items : [];
+      const variantIds = safeItems.map((it) => it.variant_id).filter(Boolean);
+      const productIds = safeItems.map((it) => it.product_id).filter(Boolean);
+
+      if (variantIds.length === 0 || productIds.length === 0) {
+        alert("Aucun article à recommander.");
+        return;
+      }
+
+      // Récupère variants
+      const { data: variants, error: vErr } = await sb
+        .from("product_variants")
+        .select("id, product_id, stock_count, is_active, price, color, length, image_url")
+        .in("id", variantIds);
+
+      if (vErr) throw vErr;
+
+      // Récupère products
+      const { data: prods, error: pErr } = await sb
+        .from("products")
+        .select("id, name, slug, description, category, is_active, base_price_min, original_price, details, image_url")
+        .in("id", productIds);
+
+      if (pErr) throw pErr;
+
+      const prodMap = new Map<string, any>();
+      (prods ?? []).forEach((p: any) => prodMap.set(String(p.id), p));
+
+      const varMap = new Map<string, any>();
+      (variants ?? []).forEach((v: any) => varMap.set(String(v.id), v));
+
+      let added = 0;
+      let skipped = 0;
+
+      for (const it of safeItems) {
+        const v = varMap.get(String(it.variant_id));
+        const p = prodMap.get(String(it.product_id));
+
+        const qty = Math.max(1, Number(it.quantity ?? 1));
+
+        // conditions dispo
+        if (!p || !v) {
+          skipped++;
+          continue;
+        }
+        if (p.is_active === false || v.is_active === false) {
+          skipped++;
+          continue;
+        }
+        const stock = Number(v.stock_count ?? 0);
+        if (stock <= 0) {
+          skipped++;
+          continue;
+        }
+
+        const qtyToAdd = Math.min(qty, stock);
+
+        // ⚠️ addToCart attend (product, variant, qty)
+        addToCart(p, v, qtyToAdd);
+        added++;
+      }
+
+      if (added > 0) {
+        alert(`✅ ${added} article(s) ajouté(s) au panier.${skipped ? ` (${skipped} indisponible(s))` : ""}`);
+        navigate("/cart");
+      } else {
+        alert("Aucun article n'est disponible pour recommander cette commande.");
+      }
+    } catch (e: any) {
+      console.error("reorder error:", e);
+      alert("Erreur lors de la recommandation.");
+    } finally {
+      setReorderLoading(null);
+    }
+  }
+
   useEffect(() => {
     if (!isLoggedIn) return;
     if (activeTab !== "orders") return;
@@ -382,43 +472,70 @@ export default function Account() {
     return (
       <div className="min-h-screen bg-background">
         <div className="container py-8">
-          {/* ✅ Header + accueil pro */}
-          <div className="mb-8">
+          {/* ✅ Header pro */}
+          <div className="flex flex-col gap-2 mb-6">
             <h1 className="font-serif text-3xl md:text-4xl font-bold text-foreground">
-              Bonjour {firstName ? `${firstName} 👋` : "👋"}
+              Bonjour {displayName} 👋
             </h1>
-            <p className="text-muted-foreground mt-2">
-              {isAdmin ? "Espace Admin" : "Bienvenue dans votre compte"}
+            <p className="text-sm text-muted-foreground">
+              {isAdmin ? "Vous êtes connecté en admin." : "Bienvenue dans votre espace client."}
             </p>
           </div>
 
           {/* ✅ Raccourcis (niveau pro) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="grid md:grid-cols-3 gap-4 mb-8">
             <button
               type="button"
               onClick={() => navigate("/shop")}
-              className="p-5 rounded-xl bg-card border border-border hover:border-primary transition text-left"
+              className="p-5 bg-card rounded-xl border border-border hover:bg-muted/40 transition-colors text-left"
             >
-              <p className="font-medium text-foreground">🛍️ Continuer mes achats</p>
-              <p className="text-sm text-muted-foreground mt-1">Retour à la boutique</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <ShoppingBag className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">Continuer mes achats</p>
+                    <p className="text-xs text-muted-foreground">Retour à la boutique</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-muted-foreground" />
+              </div>
             </button>
 
             <button
               type="button"
               onClick={() => navigate("/cart")}
-              className="p-5 rounded-xl bg-card border border-border hover:border-primary transition text-left"
+              className="p-5 bg-card rounded-xl border border-border hover:bg-muted/40 transition-colors text-left"
             >
-              <p className="font-medium text-foreground">🧺 Voir mon panier{totalItems > 0 ? ` (${totalItems})` : ""}</p>
-              <p className="text-sm text-muted-foreground mt-1">Finaliser ma commande</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <ShoppingBag className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">Voir mon panier</p>
+                    <p className="text-xs text-muted-foreground">Finaliser ma commande</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-muted-foreground" />
+              </div>
             </button>
 
             <button
               type="button"
-              onClick={() => setActiveTab("orders")}
-              className="p-5 rounded-xl bg-card border border-border hover:border-primary transition text-left"
+              onClick={() => {
+                setActiveTab("orders");
+                navigate("/account?tab=orders");
+              }}
+              className="p-5 bg-card rounded-xl border border-border hover:bg-muted/40 transition-colors text-left"
             >
-              <p className="font-medium text-foreground">📦 Mes commandes</p>
-              <p className="text-sm text-muted-foreground mt-1">Historique & suivi</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Package className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">Mes commandes</p>
+                    <p className="text-xs text-muted-foreground">Suivre / recommander</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-muted-foreground" />
+              </div>
             </button>
           </div>
 
@@ -440,7 +557,10 @@ export default function Account() {
               ).map((item) => (
                 <button
                   key={item.key}
-                  onClick={() => setActiveTab(item.key)}
+                  onClick={() => {
+                    setActiveTab(item.key);
+                    navigate(item.key === "orders" ? "/account?tab=orders" : "/account");
+                  }}
                   className={cn(
                     "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                     activeTab === item.key
@@ -579,7 +699,6 @@ export default function Account() {
                                 {formatDate(o.created_at)} • {o.payment_method ?? "-"} • {o.delivery_mode ?? "-"}
                                 {o.status ? ` • ${o.status}` : ""}
                               </p>
-
                               {isAdmin && (
                                 <p className="text-sm text-muted-foreground">
                                   Client: {o.full_name ?? "-"} • {o.phone ?? "-"}
@@ -587,15 +706,27 @@ export default function Account() {
                               )}
                             </div>
 
-                            <div className="flex items-center justify-between md:justify-end gap-4">
+                            <div className="flex items-center justify-between md:justify-end gap-3">
                               <div className="text-right">
                                 <p className="text-sm text-muted-foreground">Total</p>
                                 <p className="text-lg font-bold text-foreground">{formatMoneyFCFA(o.total)}</p>
                               </div>
 
-                              <Button variant="outline" onClick={() => toggleOrderDetails(o.id)}>
-                                {selectedOrderId === o.id ? "Fermer" : "Voir détails"}
-                              </Button>
+                              <div className="flex gap-2">
+                                {!isAdmin && (
+                                  <Button
+                                    variant="hero"
+                                    onClick={() => reorderFromOrder(o.id)}
+                                    disabled={reorderLoading === o.id}
+                                  >
+                                    {reorderLoading === o.id ? "..." : "Recommander"}
+                                  </Button>
+                                )}
+
+                                <Button variant="outline" onClick={() => toggleOrderDetails(o.id)}>
+                                  {selectedOrderId === o.id ? "Fermer" : "Voir détails"}
+                                </Button>
+                              </div>
                             </div>
                           </div>
 
@@ -616,7 +747,7 @@ export default function Account() {
                                     orderItems.map((it, idx) => (
                                       <div
                                         key={`${it.order_id}-${idx}`}
-                                        className="flex items-center justify-between text-sm"
+                                        className="flex items-center justify-between text-sm border border-border rounded-lg px-3 py-2"
                                       >
                                         <div className="text-muted-foreground">
                                           Produit #{it.product_id ?? "?"}
@@ -629,9 +760,17 @@ export default function Account() {
                                           ) : null}
                                           {" • "}x{Number(it.quantity ?? 1)}
                                         </div>
-                                        <div className="font-medium text-foreground">
-                                          {formatMoneyFCFA(Number(it.unit_price ?? 0))}
-                                        </div>
+
+                                        {!isAdmin && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => reorderFromOrder(o.id)}
+                                            disabled={reorderLoading === o.id}
+                                          >
+                                            {reorderLoading === o.id ? "..." : "Recommander"}
+                                          </Button>
+                                        )}
                                       </div>
                                     ))
                                   )}
@@ -799,10 +938,7 @@ export default function Account() {
                     type={showConfirmPassword ? "text" : "password"}
                     autoComplete="new-password"
                     placeholder="••••••••"
-                    className={cn(
-                      "pl-10 pr-10",
-                      passwordError && "border-destructive focus-visible:ring-destructive"
-                    )}
+                    className={cn("pl-10 pr-10", passwordError && "border-destructive focus-visible:ring-destructive")}
                     required
                     value={confirmPassword}
                     onChange={(e) => {
@@ -833,11 +969,7 @@ export default function Account() {
             <span className="text-muted-foreground">
               {isLogin ? "Pas encore de compte?" : "Déjà un compte?"}
             </span>{" "}
-            <button
-              type="button"
-              onClick={handleToggleMode}
-              className="text-primary font-medium hover:underline"
-            >
+            <button type="button" onClick={handleToggleMode} className="text-primary font-medium hover:underline">
               {isLogin ? "S'inscrire" : "Se connecter"}
             </button>
           </div>

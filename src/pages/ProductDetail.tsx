@@ -71,8 +71,8 @@ export default function ProductDetail() {
   const currentMedia = medias[selectedImageIndex] || "/placeholder.svg";
 
   const hasVariants = !!currentVariant && colorKeys.length > 0;
-  const [quantity, setQuantity] = useState(1);
 
+  const [quantity, setQuantity] = useState(1);
   const currentStock = currentVariant?.stock_count ?? 0;
   const maxQty = Math.max(1, currentStock);
 
@@ -133,22 +133,20 @@ export default function ProductDetail() {
   const relatedProducts = useMemo(() => {
     if (!product) return [];
 
-    const basePrice = Number(product.base_price_min ?? product.price ?? 0);
+    const basePrice = Number(product.base_price_min ?? (product as any).price ?? 0);
     const fam = categoryFamily(product.category);
 
     const scored = products
       .filter((p) => String(p.id) !== String(product.id))
       .map((p) => {
-        const pPrice = Number(p.base_price_min ?? p.price ?? 0);
-        const sameCat =
-          p.category && product.category && p.category === product.category;
+        const pPrice = Number(p.base_price_min ?? (p as any).price ?? 0);
+        const sameCat = p.category && product.category && p.category === product.category;
         const sameFam = categoryFamily(p.category) === fam;
 
         const within20 =
           basePrice > 0 ? Math.abs(pPrice - basePrice) / basePrice <= 0.2 : false;
 
-        const score =
-          (sameCat ? 3 : 0) + (!sameCat && sameFam ? 2 : 0) + (within20 ? 1 : 0);
+        const score = (sameCat ? 3 : 0) + (!sameCat && sameFam ? 2 : 0) + (within20 ? 1 : 0);
 
         return { p, score, diff: Math.abs(pPrice - basePrice) };
       })
@@ -160,6 +158,80 @@ export default function ProductDetail() {
 
     return scored.slice(0, 8);
   }, [products, product]);
+
+  // ===== SEO values (do not put hooks after early returns!) =====
+  const categoryText = product?.category
+    ? categoryLabels[product.category] || String(product.category).replace(/-/g, " ")
+    : "";
+
+  // image principale SEO (préférence: image_url -> carousel -> placeholder)
+  const mainImage =
+    (product as any)?.image_url ||
+    (product as any)?.imageUrl ||
+    (product as any)?.image ||
+    (carouselItems[0]?.imageUrl ?? undefined);
+
+  const canonicalPath = `/product/${safeId}`;
+
+  const seoTitle = product ? `${product.name} | BelléaWigs` : "BelléaWigs";
+  const seoDescription =
+    (product ? String(product.description ?? "").trim() : "") ||
+    "Découvrez nos perruques et mèches de qualité premium : styles tendance, cheveux 100% humains.";
+
+  // ✅ IMPORTANT: hook is always called (prevents React error #310)
+  const productJsonLd = useMemo(() => {
+    if (!product) return null;
+
+    const origin =
+      (import.meta as any)?.env?.VITE_SITE_URL || "https://www.belleawigs.com";
+    const cleanOrigin = String(origin).replace(/\/+$/, "");
+    const url = `${cleanOrigin}${canonicalPath}`;
+
+    const priceNumber = Number(activePrice ?? 0);
+    const inStock = (currentVariant?.stock_count ?? 0) > 0;
+
+    const images = [mainImage, ...medias.filter(Boolean)]
+      .filter(Boolean) as string[];
+
+    const sku =
+      (currentVariant as any)?.sku ||
+      String((product as any)?.id || safeId);
+
+    const cat = categoryText ? String(categoryText) : undefined;
+
+    return {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: String(product.name),
+      description: seoDescription,
+      image: images.length ? images : undefined,
+      sku,
+      brand: { "@type": "Brand", name: "BelléaWigs" },
+      category: cat,
+      url,
+      offers: {
+        "@type": "Offer",
+        url,
+        price: Number.isFinite(priceNumber) ? priceNumber.toFixed(2) : "0.00",
+        priceCurrency: "XOF",
+        availability: inStock
+          ? "https://schema.org/InStock"
+          : "https://schema.org/OutOfStock",
+        itemCondition: "https://schema.org/NewCondition",
+      },
+    };
+  }, [
+    product,
+    canonicalPath,
+    activePrice,
+    currentVariant?.stock_count,
+    (currentVariant as any)?.sku,
+    mainImage,
+    medias,
+    seoDescription,
+    categoryText,
+    safeId,
+  ]);
 
   if (isLoading) {
     return (
@@ -177,12 +249,8 @@ export default function ProductDetail() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
           <AlertCircle className="h-8 w-8 mx-auto text-destructive" />
-          <h1 className="font-serif text-2xl font-bold text-foreground">
-            Produit non trouvé
-          </h1>
-          <p className="text-muted-foreground">
-            {error || "Ce produit n'existe pas."}
-          </p>
+          <h1 className="font-serif text-2xl font-bold text-foreground">Produit non trouvé</h1>
+          <p className="text-muted-foreground">{error || "Ce produit n'existe pas."}</p>
           <Link to="/shop">
             <Button className="mt-2">Retour à la boutique</Button>
           </Link>
@@ -191,95 +259,9 @@ export default function ProductDetail() {
     );
   }
 
-  const categoryText = product.category
-    ? categoryLabels[product.category] ||
-      String(product.category).replace(/-/g, " ")
-    : "";
-
-  // image principale SEO (préférence: image_url -> carousel -> placeholder)
-  const mainImage =
-    (product as any)?.image_url ||
-    (product as any)?.imageUrl ||
-    (product as any)?.image ||
-    (carouselItems[0]?.imageUrl ?? undefined);
-
-  // SEO: canonical + description
-  const canonicalPath = `/product/${safeId}`;
-  const seoTitle = `${product.name} | BelléaWigs`;
-  const seoDescription =
-    String(product.description ?? "").trim() ||
-    "Découvrez nos perruques et mèches de qualité premium : styles tendance, cheveux 100% humains.";
-
-  // ✅ JSON-LD Product (Rich Results)
-  // Notes:
-  // - priceCurrency: j'ai mis XOF par défaut (FCFA). Change si tu utilises autre.
-  // - url: utilise la canonical URL.
-  // - sku: si tu as un SKU dans currentVariant, sinon fallback.
-  // - brand: BelléaWigs (ok pour ta boutique).
-  const productJsonLd = useMemo(() => {
-    const origin =
-      (import.meta as any)?.env?.VITE_SITE_URL ||
-      "https://www.belleawigs.com";
-
-    const cleanOrigin = String(origin).replace(/\/+$/, "");
-    const url = `${cleanOrigin}${canonicalPath}`;
-
-    const priceNumber = Number(activePrice ?? 0);
-    const inStock = (currentVariant?.stock_count ?? 0) > 0;
-
-    // images: si tu as plusieurs images, c'est encore mieux
-    const images = [
-      mainImage,
-      ...medias.filter(Boolean),
-    ].filter(Boolean) as string[];
-
-    // SKU (optionnel)
-    const sku = (currentVariant as any)?.sku || String((product as any)?.id || safeId);
-
-    // category (optionnel)
-    const cat = categoryText ? String(categoryText) : undefined;
-
-    return {
-      "@context": "https://schema.org",
-      "@type": "Product",
-      name: String(product.name),
-      description: seoDescription,
-      image: images.length ? images : undefined,
-      sku,
-      brand: {
-        "@type": "Brand",
-        name: "BelléaWigs",
-      },
-      category: cat,
-      url,
-      offers: {
-        "@type": "Offer",
-        url,
-        price: Number.isFinite(priceNumber) ? priceNumber.toFixed(2) : "0.00",
-        priceCurrency: "XOF",
-        availability: inStock
-          ? "https://schema.org/InStock"
-          : "https://schema.org/OutOfStock",
-        itemCondition: "https://schema.org/NewCondition",
-      },
-    };
-  }, [
-    canonicalPath,
-    activePrice,
-    currentVariant?.stock_count,
-    currentVariant,
-    mainImage,
-    medias,
-    product.name,
-    seoDescription,
-    categoryText,
-    product,
-    safeId,
-  ]);
-
   return (
     <>
-      {/* ✅ Meta tags SEO (title, description, canonical, og, etc.) */}
+      {/* ✅ Meta tags SEO */}
       <SEO
         title={seoTitle}
         description={seoDescription}
@@ -289,11 +271,13 @@ export default function ProductDetail() {
       />
 
       {/* ✅ JSON-LD Rich Results */}
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
-      />
+      {productJsonLd && (
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+        />
+      )}
 
       <div className="min-h-screen bg-background">
         <div className="container py-8">
@@ -326,12 +310,7 @@ export default function ProductDetail() {
             <div className="space-y-4">
               <div className="relative aspect-square rounded-2xl overflow-hidden bg-muted group">
                 {isVideo(currentMedia) ? (
-                  <video
-                    src={currentMedia}
-                    controls
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
+                  <video src={currentMedia} controls playsInline className="w-full h-full object-cover" />
                 ) : (
                   <img
                     src={currentMedia}
@@ -387,12 +366,7 @@ export default function ProductDetail() {
                       )}
                     >
                       {isVideo(img) ? (
-                        <video
-                          src={img}
-                          muted
-                          playsInline
-                          className="w-full h-full object-cover"
-                        />
+                        <video src={img} muted playsInline className="w-full h-full object-cover" />
                       ) : (
                         <img src={img} alt="" className="w-full h-full object-cover" />
                       )}
@@ -410,27 +384,20 @@ export default function ProductDetail() {
                 </span>
               )}
 
-              <h1 className="font-serif text-3xl md:text-4xl font-bold text-foreground">
-                {product.name}
-              </h1>
+              <h1 className="font-serif text-3xl md:text-4xl font-bold text-foreground">{product.name}</h1>
 
               {product.description && (
-                <p className="text-muted-foreground leading-relaxed">
-                  {product.description}
-                </p>
+                <p className="text-muted-foreground leading-relaxed">{product.description}</p>
               )}
 
               <div className="flex items-baseline gap-3 py-4 border-y border-border">
-                <span className="font-serif text-3xl font-bold text-foreground">
-                  {formatPrice(activePrice)}
-                </span>
+                <span className="font-serif text-3xl font-bold text-foreground">{formatPrice(activePrice)}</span>
 
-                {typeof product.original_price === "number" &&
-                  product.original_price > activePrice && (
-                    <span className="text-lg text-muted-foreground line-through">
-                      {formatPrice(product.original_price)}
-                    </span>
-                  )}
+                {typeof product.original_price === "number" && product.original_price > activePrice && (
+                  <span className="text-lg text-muted-foreground line-through">
+                    {formatPrice(product.original_price)}
+                  </span>
+                )}
               </div>
 
               {hasVariants ? (
@@ -439,14 +406,10 @@ export default function ProductDetail() {
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium">
                         Couleur{" "}
-                        {selectedColorKey && (
-                          <span className="text-primary">: {selectedColorKey}</span>
-                        )}
+                        {selectedColorKey && <span className="text-primary">: {selectedColorKey}</span>}
                       </label>
                       {!selectedColorKey && (
-                        <span className="text-xs text-muted-foreground">
-                          Sélectionnez une couleur
-                        </span>
+                        <span className="text-xs text-muted-foreground">Sélectionnez une couleur</span>
                       )}
                     </div>
 
@@ -488,9 +451,7 @@ export default function ProductDetail() {
                           )}
                         </label>
                         {selectedLength == null && (
-                          <span className="text-xs text-muted-foreground">
-                            Sélectionnez une longueur
-                          </span>
+                          <span className="text-xs text-muted-foreground">Sélectionnez une longueur</span>
                         )}
                       </div>
 
@@ -527,32 +488,27 @@ export default function ProductDetail() {
                 {isInStock ? (
                   <>
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm text-green-600 font-medium">
-                      En stock ({currentStock})
-                    </span>
+                    <span className="text-sm text-green-600 font-medium">En stock ({currentStock})</span>
                   </>
                 ) : (
                   <>
                     <span className="w-2 h-2 rounded-full bg-red-500" />
-                    <span className="text-sm text-red-600 font-medium">
-                      Rupture de stock
-                    </span>
+                    <span className="text-sm text-red-600 font-medium">Rupture de stock</span>
                   </>
                 )}
               </div>
 
-              {Array.isArray((product as any).details) &&
-                (product as any).details.length > 0 && (
-                  <div className="space-y-3 py-4 border-y border-border">
-                    <h3 className="text-sm font-medium">Caractéristiques :</h3>
-                    {(product as any).details.map((detail: string, idx: number) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm">
-                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                        <span>{detail}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              {Array.isArray((product as any).details) && (product as any).details.length > 0 && (
+                <div className="space-y-3 py-4 border-y border-border">
+                  <h3 className="text-sm font-medium">Caractéristiques :</h3>
+                  {(product as any).details.map((detail: string, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>{detail}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="space-y-4">
                 {addToCartMessage && (
@@ -603,13 +559,7 @@ export default function ProductDetail() {
                   )}
                 </div>
 
-                <Button
-                  variant="hero"
-                  size="lg"
-                  className="w-full"
-                  onClick={handleAdd}
-                  disabled={!canAddToCart}
-                >
+                <Button variant="hero" size="lg" className="w-full" onClick={handleAdd} disabled={!canAddToCart}>
                   <ShoppingBag className="h-5 w-5" />
                   Ajouter au panier
                 </Button>
@@ -644,9 +594,7 @@ export default function ProductDetail() {
           {relatedProducts.length > 0 && (
             <div className="mt-16 md:mt-24">
               <div className="flex items-end justify-between gap-4 mb-8">
-                <h2 className="font-serif text-2xl md:text-3xl font-bold text-foreground">
-                  Produits similaires
-                </h2>
+                <h2 className="font-serif text-2xl md:text-3xl font-bold text-foreground">Produits similaires</h2>
 
                 {product.category && (
                   <Link to={`/shop?category=${encodeURIComponent(product.category)}`}>
