@@ -1,6 +1,6 @@
 // src/pages/Account.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { User, Package, Heart, LogOut, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useCart } from "@/contexts/CartContext";
 
 import AdminProductsPanel from "@/pages/admin/AdminProductsPanel";
 import AdminCatalog from "@/pages/admin/AdminCatalog";
@@ -68,6 +69,10 @@ function formatDate(iso?: string | null) {
 type TabKey = "profile" | "orders" | "favorites" | "admin_products" | "admin_catalog";
 
 export default function Account() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { totalItems } = useCart();
+
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -98,7 +103,7 @@ export default function Account() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // IDs stables (pour labels + autofill)
+  // IDs stables (labels + autofill)
   const ids = {
     profileFullName: "profile_full_name",
     profileEmail: "profile_email",
@@ -112,6 +117,12 @@ export default function Account() {
     authPassword: "auth_password",
     authConfirmPassword: "auth_confirm_password",
   } as const;
+
+  const firstName = useMemo(() => {
+    const n = String(fullName ?? "").trim();
+    if (!n) return "";
+    return n.split(/\s+/)[0] ?? "";
+  }, [fullName]);
 
   // session listener
   useEffect(() => {
@@ -186,12 +197,20 @@ export default function Account() {
 
   const isAdmin = useMemo(() => profile?.role === "admin", [profile?.role]);
 
-  // OPTIONNEL (confort): si admin et tu arrives, on ouvre direct Produits
+  // ✅ support /account?tab=orders (et autres tabs)
   useEffect(() => {
     if (!isLoggedIn) return;
-    if (!isAdmin) return;
-    // setActiveTab("admin_products");
-  }, [isLoggedIn, isAdmin]);
+
+    const tab = (searchParams.get("tab") ?? "") as TabKey;
+    const allowed: TabKey[] = ["profile", "orders", "favorites", "admin_products", "admin_catalog"];
+
+    if (allowed.includes(tab)) {
+      // empêche admin tabs si pas admin
+      if (!isAdmin && (tab === "admin_products" || tab === "admin_catalog")) return;
+      if (tab !== activeTab) setActiveTab(tab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, searchParams, isAdmin]);
 
   const handleToggleMode = () => {
     setIsLogin((v) => !v);
@@ -363,9 +382,45 @@ export default function Account() {
     return (
       <div className="min-h-screen bg-background">
         <div className="container py-8">
-          <h1 className="font-serif text-3xl md:text-4xl font-bold text-foreground mb-8">
-            {isAdmin ? "Espace Admin" : "Mon Compte"}
-          </h1>
+          {/* ✅ Header + accueil pro */}
+          <div className="mb-8">
+            <h1 className="font-serif text-3xl md:text-4xl font-bold text-foreground">
+              Bonjour {firstName ? `${firstName} 👋` : "👋"}
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              {isAdmin ? "Espace Admin" : "Bienvenue dans votre compte"}
+            </p>
+          </div>
+
+          {/* ✅ Raccourcis (niveau pro) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <button
+              type="button"
+              onClick={() => navigate("/shop")}
+              className="p-5 rounded-xl bg-card border border-border hover:border-primary transition text-left"
+            >
+              <p className="font-medium text-foreground">🛍️ Continuer mes achats</p>
+              <p className="text-sm text-muted-foreground mt-1">Retour à la boutique</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate("/cart")}
+              className="p-5 rounded-xl bg-card border border-border hover:border-primary transition text-left"
+            >
+              <p className="font-medium text-foreground">🧺 Voir mon panier{totalItems > 0 ? ` (${totalItems})` : ""}</p>
+              <p className="text-sm text-muted-foreground mt-1">Finaliser ma commande</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("orders")}
+              className="p-5 rounded-xl bg-card border border-border hover:border-primary transition text-left"
+            >
+              <p className="font-medium text-foreground">📦 Mes commandes</p>
+              <p className="text-sm text-muted-foreground mt-1">Historique & suivi</p>
+            </button>
+          </div>
 
           <div className="grid md:grid-cols-4 gap-8">
             {/* Sidebar */}

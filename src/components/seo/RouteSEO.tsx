@@ -1,13 +1,12 @@
+// src/components/seo/RouteSEO.tsx
 import { useLocation } from "react-router-dom";
 import SEO from "./SEO";
 
 export default function RouteSEO() {
   const { pathname } = useLocation();
 
-  // ✅ Noindex sur admin + account
   const isPrivate = pathname.startsWith("/admin") || pathname.startsWith("/account");
 
-  // Mets tes textes SEO ici
   switch (true) {
     case pathname === "/":
       return (
@@ -30,7 +29,6 @@ export default function RouteSEO() {
       );
 
     case pathname.startsWith("/product/"):
-      // IMPORTANT : ton route est /product/:id, donc title dynamique se fera dans ProductDetail (voir étape 5)
       return (
         <SEO
           title="Détails produit"
@@ -44,13 +42,21 @@ export default function RouteSEO() {
       return <SEO title="Panier" description="Vérifiez votre panier avant de passer commande." canonical="/cart" />;
 
     case pathname === "/checkout":
-      return <SEO title="Paiement" description="Finalisez votre commande BelléaWigs en toute sécurité." canonical="/checkout" />;
+      return (
+        <SEO title="Paiement" description="Finalisez votre commande BelléaWigs en toute sécurité." canonical="/checkout" />
+      );
 
     case pathname === "/livraison":
       return <SEO title="Livraison" description="Informations de livraison au Togo et au Bénin." canonical="/livraison" />;
 
     case pathname === "/retours-remboursements":
-      return <SEO title="Retours & remboursements" description="Politique de retours et remboursements BelléaWigs." canonical="/retours-remboursements" />;
+      return (
+        <SEO
+          title="Retours & remboursements"
+          description="Politique de retours et remboursements BelléaWigs."
+          canonical="/retours-remboursements"
+        />
+      );
 
     case pathname === "/guide-tailles":
       return <SEO title="Guide des tailles" description="Choisissez la bonne taille de perruque avec notre guide." canonical="/guide-tailles" />;
@@ -61,7 +67,6 @@ export default function RouteSEO() {
     case pathname === "/faq":
       return <SEO title="FAQ" description="Questions fréquentes : livraison, paiement, produits, retours." canonical="/faq" />;
 
-    // ✅ Pages privées
     case isPrivate:
       return <SEO title="Espace privé" noindex canonical={pathname} />;
 
