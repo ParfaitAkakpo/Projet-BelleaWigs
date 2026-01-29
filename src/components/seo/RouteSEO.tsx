@@ -1,6 +1,6 @@
 // src/components/seo/RouteSEO.tsx
 import { useLocation } from "react-router-dom";
-import SEO from "./SEO";
+import SEO from "@/components/seo/SEO";
 
 export default function RouteSEO() {
   const { pathname } = useLocation();
