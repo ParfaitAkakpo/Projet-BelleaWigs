@@ -1,4 +1,6 @@
+// src/pages/account/OrdersPage.tsx
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Package, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,7 +37,7 @@ function formatMoneyFCFA(n: any) {
 function formatDate(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
+  if (Number.isNaN(d.getTime())) return String(iso);
   return d.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
 }
 
@@ -53,13 +55,13 @@ export default function OrdersPage() {
   const [itemsLoading, setItemsLoading] = useState(false);
   const [orderItems, setOrderItems] = useState<OrderItemRow[]>([]);
 
-  // get session
+  // session
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
     });
-    return () => sub.subscription.unsubscribe();
+    return () => sub?.subscription?.unsubscribe?.();
   }, []);
 
   const loadOrders = async () => {
@@ -78,7 +80,7 @@ export default function OrdersPage() {
       if (error) throw error;
       setOrders((data ?? []) as any);
     } catch (e: any) {
-      console.error(e);
+      console.error("loadOrders error:", e);
       setError(e?.message ?? "Erreur chargement commandes");
       setOrders([]);
     } finally {
@@ -112,18 +114,18 @@ export default function OrdersPage() {
       if (error) throw error;
       setOrderItems((data ?? []) as any);
     } catch (e: any) {
-      console.error(e);
+      console.error("loadOrderItems error:", e);
       setOrderItems([]);
     } finally {
       setItemsLoading(false);
     }
   };
 
-  // ✅ recommander 1 item
+  // ✅ Recommander (si produit actif + variante en stock)
   const reorderItem = async (it: OrderItemRow) => {
     const productId = it.product_id;
     const variantId = it.variant_id;
-    const qty = Math.max(1, Number(it.quantity ?? 1));
+    const wantedQty = Math.max(1, Number(it.quantity ?? 1));
 
     if (!productId || !variantId) {
       toast.error("Impossible de recommander cet article (infos manquantes).");
@@ -131,7 +133,7 @@ export default function OrdersPage() {
     }
 
     try {
-      // 1) product must exist and be active
+      // 1) produit existe + actif
       const { data: product, error: pErr } = await sb
         .from("products")
         .select("*")
@@ -139,35 +141,43 @@ export default function OrdersPage() {
         .maybeSingle();
 
       if (pErr) throw pErr;
-
       if (!product || product.is_active === false) {
         toast.error("Cet article n’est plus disponible.");
         return;
       }
 
-      // 2) variant must exist and be in stock
-      // ⚠️ Si ta table s’appelle autrement, change "product_variants" ici.
+      // 2) variante existe + active + stock
       const { data: variant, error: vErr } = await sb
-        .from("product_variant")
+        .from("product_variant") // ✅ ton nom de table
         .select("*")
         .eq("id", variantId)
         .maybeSingle();
 
       if (vErr) throw vErr;
 
-      if (!variant || Number(variant.stock_count ?? 0) <= 0) {
+      const stock = Math.max(0, Number(variant?.stock_count ?? 0));
+      const variantActive = variant?.is_active !== false;
+
+      if (!variant || !variantActive) {
+        toast.error("Variante indisponible.");
+        return;
+      }
+
+      if (stock <= 0) {
         toast.error("Variante en rupture de stock.");
         return;
       }
 
-      // clamp qty to stock
-      const stock = Math.max(0, Number(variant.stock_count ?? 0));
-      const finalQty = Math.min(qty, stock);
+      const finalQty = Math.min(wantedQty, stock);
 
       addToCart(product, variant, finalQty);
-      toast.success(finalQty < qty ? "Ajouté au panier (quantité ajustée au stock)." : "Ajouté au panier ✅");
+      toast.success(
+        finalQty < wantedQty
+          ? "Ajouté au panier (quantité ajustée au stock)."
+          : "Ajouté au panier ✅"
+      );
     } catch (e: any) {
-      console.error(e);
+      console.error("reorderItem error:", e);
       toast.error(e?.message ?? "Erreur lors de la recommandation");
     }
   };
@@ -190,7 +200,7 @@ export default function OrdersPage() {
           <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>Aucune commande pour le moment</p>
           <Button className="mt-4" variant="hero" asChild>
-            <a href="/account/shop">Aller à la boutique</a>
+            <Link to="/shop">Aller à la boutique</Link>
           </Button>
         </div>
       )}
@@ -247,7 +257,7 @@ export default function OrdersPage() {
                                     {it.length != null ? ` - ${it.length}"` : ""})
                                   </span>
                                 ) : null}
-                                {" • "}x{Number(it.quantity ?? 1)}
+                                {" • "}x{Math.max(1, Number(it.quantity ?? 1))}
                               </div>
                               <div className="font-medium text-foreground">
                                 {formatMoneyFCFA(Number(it.unit_price ?? 0))}

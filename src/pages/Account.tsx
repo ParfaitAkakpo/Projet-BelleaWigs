@@ -393,7 +393,7 @@ export default function Account() {
 
       // Récupère variants
       const { data: variants, error: vErr } = await sb
-        .from("product_variants")
+        .from("product_variant")
         .select("id, product_id, stock_count, is_active, price, color, length, image_url")
         .in("id", variantIds);
 
