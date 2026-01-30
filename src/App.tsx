@@ -1,3 +1,4 @@
+// src/App.tsx
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,6 +17,15 @@ import AdminLogin from "@/pages/admin/AdminLogin";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminProducts from "@/pages/admin/AdminProductsPanel";
 import AdminCatalog from "@/pages/admin/AdminCatalog";
+
+// ✅ Account shell + pages inside account
+import AccountShell from "@/pages/account/AccountShell";
+import AccountShop from "@/pages/account/AccountShop";
+import AccountCart from "@/pages/account/AccountCart";
+import AccountCheckout from "@/pages/account/AccountCheckout";
+import AccountProductDetail from "@/pages/account/AccountProduitDetail";
+import OrdersPage from "@/pages/account/OrdersPage";
+import DashboardPage from "@/pages/account/DashboardPage";
 
 import Index from "./pages/Index";
 import Shop from "./pages/Shop";
@@ -45,7 +55,9 @@ const App = () => (
 
             <Layout>
               <Routes>
-                {/* Public */}
+                {/* =======================
+                   PUBLIC (SEO)
+                ======================= */}
                 <Route path="/" element={<Index />} />
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
@@ -54,19 +66,42 @@ const App = () => (
 
                 <Route path="/payment" element={<Payment />} />
                 <Route path="/payment/return" element={<PaymentReturn />} />
-
                 <Route path="/order-confirmation" element={<OrderConfirmation />} />
-                <Route path="/account" element={<Account />} />
+
                 <Route path="/livraison" element={<Livraison />} />
                 <Route path="/retours-remboursements" element={<Retours />} />
                 <Route path="/guide-tailles" element={<GuideTailles />} />
                 <Route path="/entretien" element={<EntretienPerruques />} />
                 <Route path="/faq" element={<FAQ />} />
 
-                {/* Admin login (non protégé) */}
+                {/* =======================
+                   AUTH (login/register)
+                   => garde /account pour login
+                ======================= */}
+                <Route path="/account" element={<Account />} />
+
+                {/* =======================
+                   ESPACE CLIENT (dans le compte)
+                   => /account/... est intégré dans AccountShell
+                ======================= */}
+                <Route path="/account" element={<AccountShell />}>
+                  <Route index element={<DashboardPage />} />
+                  <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="orders" element={<OrdersPage />} />
+
+                  <Route path="shop" element={<AccountShop />} />
+                  <Route path="product/:id" element={<AccountProductDetail />} />
+                  <Route path="cart" element={<AccountCart />} />
+                  <Route path="checkout" element={<AccountCheckout />} />
+
+                  <Route path="favorites" element={<div>Favoris (à venir)</div>} />
+                </Route>
+
+                {/* =======================
+                   ADMIN
+                ======================= */}
                 <Route path="/admin/login" element={<AdminLogin />} />
 
-                {/* Admin protégé */}
                 <Route element={<RequireAdmin />}>
                   <Route path="/admin">
                     <Route index element={<AdminDashboard />} />
@@ -75,7 +110,9 @@ const App = () => (
                   </Route>
                 </Route>
 
-                {/* 404 */}
+                {/* =======================
+                   404
+                ======================= */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Layout>
@@ -85,6 +122,5 @@ const App = () => (
     </QueryClientProvider>
   </HelmetProvider>
 );
-
 
 export default App;
