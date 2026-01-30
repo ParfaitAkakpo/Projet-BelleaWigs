@@ -28,26 +28,32 @@ export default function RouteSEO() {
         />
       );
 
-    case pathname.startsWith("/product/"):
+    case pathname === "/cart":
       return (
         <SEO
-          title="Détails produit"
-          description="Voir les détails, options et prix du produit BelléaWigs."
-          canonical={pathname}
-          image="/og-product.jpg"
+          title="Panier"
+          description="Vérifiez votre panier avant de passer commande."
+          canonical="/cart"
         />
       );
 
-    case pathname === "/cart":
-      return <SEO title="Panier" description="Vérifiez votre panier avant de passer commande." canonical="/cart" />;
-
     case pathname === "/checkout":
       return (
-        <SEO title="Paiement" description="Finalisez votre commande BelléaWigs en toute sécurité." canonical="/checkout" />
+        <SEO
+          title="Paiement sécurisé"
+          description="Finalisez votre commande BelléaWigs en toute sécurité."
+          canonical="/checkout"
+        />
       );
 
     case pathname === "/livraison":
-      return <SEO title="Livraison" description="Informations de livraison au Togo et au Bénin." canonical="/livraison" />;
+      return (
+        <SEO
+          title="Livraison"
+          description="Informations de livraison au Togo et au Bénin."
+          canonical="/livraison"
+        />
+      );
 
     case pathname === "/retours-remboursements":
       return (
@@ -59,18 +65,37 @@ export default function RouteSEO() {
       );
 
     case pathname === "/guide-tailles":
-      return <SEO title="Guide des tailles" description="Choisissez la bonne taille de perruque avec notre guide." canonical="/guide-tailles" />;
+      return (
+        <SEO
+          title="Guide des tailles"
+          description="Choisissez la bonne taille de perruque avec notre guide."
+          canonical="/guide-tailles"
+        />
+      );
 
     case pathname === "/entretien":
-      return <SEO title="Entretien des perruques" description="Conseils pour entretenir vos perruques et mèches." canonical="/entretien" />;
+      return (
+        <SEO
+          title="Entretien des perruques"
+          description="Conseils pour entretenir vos perruques et mèches."
+          canonical="/entretien"
+        />
+      );
 
     case pathname === "/faq":
-      return <SEO title="FAQ" description="Questions fréquentes : livraison, paiement, produits, retours." canonical="/faq" />;
+      return (
+        <SEO
+          title="FAQ"
+          description="Questions fréquentes : livraison, paiement, produits, retours."
+          canonical="/faq"
+        />
+      );
 
+    // 🔒 Pages privées
     case isPrivate:
       return <SEO title="Espace privé" noindex canonical={pathname} />;
 
     default:
-      return <SEO title="Page" canonical={pathname} />;
+      return <SEO title="BelléaWigs" canonical={pathname} />;
   }
 }

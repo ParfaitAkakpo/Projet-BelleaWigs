@@ -25,8 +25,11 @@ export default function SEO({
     : `${title} | ${SITE_NAME}`;
 
   const canonicalUrl = canonical
-    ? `${SITE_URL}${canonical}`
-    : undefined;
+  ? canonical.startsWith("http")
+    ? canonical
+    : `${SITE_URL}${canonical}`
+  : undefined;
+
 
   const ogImage = image
     ? image.startsWith("http")
@@ -63,9 +66,9 @@ export default function SEO({
       {ogImage && <meta name="twitter:image" content={ogImage} />}
 
       {/* Indexation */}
-      {noindex && (
-        <meta name="robots" content="noindex,nofollow" />
-      )}
+      {
+        <meta name="robots" content={noindex ? "noindex,nofollow" : "index,follow"} />
+        }
     </Helmet>
   );
 }
