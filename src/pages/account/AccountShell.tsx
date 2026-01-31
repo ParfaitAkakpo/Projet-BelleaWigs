@@ -88,15 +88,15 @@ export default function AccountShell() {
   }, [session?.user?.id]);
 
   const helloName = useMemo(() => firstName(profile?.full_name) || "👋", [profile?.full_name]);
+const links = [
+  { to: "/account/dashboard", label: "Tableau de bord", icon: LayoutDashboard, end: true },
+  { to: "/account/orders", label: "Mes commandes", icon: Package },
+  { to: "/account/shop", label: "Boutique", icon: ShoppingBag },
+  { to: "/account/cart", label: "Panier", icon: ShoppingCart },
+  { to: "/account/favorites", label: "Favoris", icon: Heart },
+  // ✅ pas de /account/profile si tu n'as pas la page
+];
 
-  const links = [
-    { to: "/account/dashboard", label: "Tableau de bord", icon: LayoutDashboard, end: true },
-    { to: "/account/orders", label: "Mes commandes", icon: Package },
-    { to: "/account/shop", label: "Boutique", icon: ShoppingBag },
-    { to: "/account/cart", label: "Panier", icon: ShoppingCart },
-    { to: "/account/favorites", label: "Favoris", icon: Heart },
-    { to: "/account/profile", label: "Profil", icon: User },
-  ];
 
   // If not logged yet, avoid rendering flicker
  if (!isLoggedIn) {

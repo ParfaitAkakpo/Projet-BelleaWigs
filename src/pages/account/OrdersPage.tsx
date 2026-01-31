@@ -1,12 +1,11 @@
 // src/pages/account/OrdersPage.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Package } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-
+import { Link } from "react-router-dom";
+import { Package, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
+import { toast } from "sonner";
 
 const sb = supabase as any;
 
@@ -43,7 +42,6 @@ function formatDate(iso?: string | null) {
 }
 
 export default function OrdersPage() {
-  const navigate = useNavigate();
   const { addToCart } = useCart();
 
   const [session, setSession] = useState<any>(null);
@@ -60,9 +58,7 @@ export default function OrdersPage() {
   // session
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => setSession(newSession));
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -72,14 +68,14 @@ export default function OrdersPage() {
     setError("");
 
     try {
-      const { data, error: qErr } = await sb
+      const { data, error } = await sb
         .from("orders")
         .select("id, created_at, status, payment_method, delivery_mode, total, user_id")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (qErr) throw qErr;
+      if (error) throw error;
       setOrders((data ?? []) as any);
     } catch (e: any) {
       console.error(e);
@@ -108,12 +104,12 @@ export default function OrdersPage() {
     setOrderItems([]);
 
     try {
-      const { data, error: qErr } = await sb
+      const { data, error } = await sb
         .from("order_items")
         .select("order_id, product_id, variant_id, quantity, unit_price, color, length")
         .eq("order_id", orderId);
 
-      if (qErr) throw qErr;
+      if (error) throw error;
       setOrderItems((data ?? []) as any);
     } catch (e: any) {
       console.error(e);
@@ -123,11 +119,11 @@ export default function OrdersPage() {
     }
   };
 
-  // ✅ recommander 1 item (si produit + variante dispo & stock)
+  // ✅ recommander 1 item (si produit actif + variant stock > 0)
   const reorderItem = async (it: OrderItemRow) => {
     const productId = it.product_id;
     const variantId = it.variant_id;
-    const qtyWanted = Math.max(1, Number(it.quantity ?? 1));
+    const qty = Math.max(1, Number(it.quantity ?? 1));
 
     if (!productId || !variantId) {
       toast.error("Impossible de recommander cet article (infos manquantes).");
@@ -135,7 +131,6 @@ export default function OrdersPage() {
     }
 
     try {
-      // product must exist + active
       const { data: product, error: pErr } = await sb
         .from("products")
         .select("*")
@@ -143,12 +138,12 @@ export default function OrdersPage() {
         .maybeSingle();
 
       if (pErr) throw pErr;
+
       if (!product || product.is_active === false) {
         toast.error("Cet article n’est plus disponible.");
         return;
       }
 
-      // ✅ variant from product_variant (ton vrai nom)
       const { data: variant, error: vErr } = await sb
         .from("product_variant")
         .select("*")
@@ -157,20 +152,17 @@ export default function OrdersPage() {
 
       if (vErr) throw vErr;
 
-      const stock = Math.max(0, Number(variant?.stock_count ?? 0));
-      if (!variant || stock <= 0) {
+      if (!variant || Number(variant.stock_count ?? 0) <= 0) {
         toast.error("Variante en rupture de stock.");
         return;
       }
 
-      const qtyFinal = Math.min(qtyWanted, stock);
-      addToCart(product, variant, qtyFinal);
+      const stock = Math.max(0, Number(variant.stock_count ?? 0));
+      const finalQty = Math.min(qty, stock);
 
-      toast.success(
-        qtyFinal < qtyWanted
-          ? "Ajouté au panier (quantité ajustée au stock)."
-          : "Ajouté au panier ✅"
-      );
+      addToCart(product, variant, finalQty);
+
+      toast.success(finalQty < qty ? "Ajouté au panier (quantité ajustée au stock)." : "Ajouté au panier ✅");
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message ?? "Erreur lors de la recommandation");
@@ -183,7 +175,6 @@ export default function OrdersPage() {
     <div className="p-6 bg-card rounded-xl shadow-card">
       <div className="flex items-center justify-between gap-4">
         <h2 className="font-serif text-xl font-semibold text-foreground">Mes commandes</h2>
-
         <Button variant="outline" onClick={loadOrders} disabled={loading}>
           {loading ? "Chargement..." : "Rafraîchir"}
         </Button>
@@ -195,8 +186,9 @@ export default function OrdersPage() {
         <div className="text-center py-10 text-muted-foreground">
           <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>Aucune commande pour le moment</p>
-          <Button className="mt-4" variant="hero" onClick={() => navigate("/account/shop")}>
-            Aller à la boutique
+
+          <Button className="mt-4" variant="hero" asChild>
+            <Link to="/account/shop">Aller à la boutique</Link>
           </Button>
         </div>
       )}
@@ -232,8 +224,7 @@ export default function OrdersPage() {
                 <div className="mt-4 border-t border-border pt-4">
                   {itemsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Chargement des items...
+                      <Loader2 className="h-4 w-4 animate-spin" /> Chargement des items...
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -256,9 +247,7 @@ export default function OrdersPage() {
                                 ) : null}
                                 {" • "}x{Number(it.quantity ?? 1)}
                               </div>
-                              <div className="font-medium text-foreground">
-                                {formatMoneyFCFA(Number(it.unit_price ?? 0))}
-                              </div>
+                              <div className="font-medium text-foreground">{formatMoneyFCFA(Number(it.unit_price ?? 0))}</div>
                             </div>
 
                             <Button

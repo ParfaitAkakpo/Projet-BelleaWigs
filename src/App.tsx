@@ -18,7 +18,8 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminProducts from "@/pages/admin/AdminProductsPanel";
 import AdminCatalog from "@/pages/admin/AdminCatalog";
 
-// ✅ Account shell + pages inside account
+// ✅ Account
+import Account from "./pages/Account"; // login/register
 import AccountShell from "@/pages/account/AccountShell";
 import AccountShop from "@/pages/account/AccountShop";
 import AccountCart from "@/pages/account/AccountCart";
@@ -33,7 +34,6 @@ import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
-import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 import Livraison from "./pages/Livraison";
 import Retours from "./pages/Retour";
@@ -50,13 +50,12 @@ const App = () => (
         <TooltipProvider>
           <Sonner />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            {/* ✅ SEO global par route */}
             <RouteSEO />
 
             <Layout>
               <Routes>
                 {/* =======================
-                   PUBLIC (SEO)
+                   PUBLIC
                 ======================= */}
                 <Route path="/" element={<Index />} />
                 <Route path="/shop" element={<Shop />} />
@@ -75,16 +74,17 @@ const App = () => (
                 <Route path="/faq" element={<FAQ />} />
 
                 {/* =======================
-                   AUTH (login/register)
-                   ✅ /account reste la page login
+                   AUTH
+                   ✅ login/register = /account/login
                 ======================= */}
-                <Route path="/account" element={<Account />} />
+                <Route path="/account/login" element={<Account />} />
 
                 {/* =======================
                    ESPACE CLIENT
-                   ✅ /account/* = Shell + pages internes
+                   ✅ shell = /account
+                   (donc /account/login ne match plus le shell)
                 ======================= */}
-                <Route path="/account/*" element={<AccountShell />}>
+                <Route path="/account" element={<AccountShell />}>
                   <Route index element={<DashboardPage />} />
                   <Route path="dashboard" element={<DashboardPage />} />
                   <Route path="orders" element={<OrdersPage />} />
@@ -101,7 +101,6 @@ const App = () => (
                    ADMIN
                 ======================= */}
                 <Route path="/admin/login" element={<AdminLogin />} />
-
                 <Route element={<RequireAdmin />}>
                   <Route path="/admin">
                     <Route index element={<AdminDashboard />} />

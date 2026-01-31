@@ -175,7 +175,13 @@ const Header = () => {
               aria-haspopup="menu"
               aria-expanded={accountMenuOpen}
               onClick={() => {
-                if (!isLoggedIn) return navigate("/account/login");
+// au click sur l’icone compte
+if (!isLoggedIn) return navigate("/account/login");
+navigate("/account/dashboard");
+
+// dropdown
+navigate("/account/dashboard");
+navigate("/account/orders");
                 setAccountMenuOpen((v) => !v);
               }}
             >
