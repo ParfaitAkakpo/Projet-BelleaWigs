@@ -1,11 +1,12 @@
 // src/pages/account/OrdersPage.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Package, Loader2 } from "lucide-react";
+import { Loader2, Package } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
-import { toast } from "sonner";
 
 const sb = supabase as any;
 
@@ -42,6 +43,7 @@ function formatDate(iso?: string | null) {
 }
 
 export default function OrdersPage() {
+  const navigate = useNavigate();
   const { addToCart } = useCart();
 
   const [session, setSession] = useState<any>(null);
@@ -61,7 +63,7 @@ export default function OrdersPage() {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
     });
-    return () => sub?.subscription?.unsubscribe?.();
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   const loadOrders = async () => {
@@ -70,17 +72,17 @@ export default function OrdersPage() {
     setError("");
 
     try {
-      const { data, error } = await sb
+      const { data, error: qErr } = await sb
         .from("orders")
         .select("id, created_at, status, payment_method, delivery_mode, total, user_id")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      if (qErr) throw qErr;
       setOrders((data ?? []) as any);
     } catch (e: any) {
-      console.error("loadOrders error:", e);
+      console.error(e);
       setError(e?.message ?? "Erreur chargement commandes");
       setOrders([]);
     } finally {
@@ -106,26 +108,26 @@ export default function OrdersPage() {
     setOrderItems([]);
 
     try {
-      const { data, error } = await sb
+      const { data, error: qErr } = await sb
         .from("order_items")
         .select("order_id, product_id, variant_id, quantity, unit_price, color, length")
         .eq("order_id", orderId);
 
-      if (error) throw error;
+      if (qErr) throw qErr;
       setOrderItems((data ?? []) as any);
     } catch (e: any) {
-      console.error("loadOrderItems error:", e);
+      console.error(e);
       setOrderItems([]);
     } finally {
       setItemsLoading(false);
     }
   };
 
-  // ✅ Recommander (si produit actif + variante en stock)
+  // ✅ recommander 1 item (si produit + variante dispo & stock)
   const reorderItem = async (it: OrderItemRow) => {
     const productId = it.product_id;
     const variantId = it.variant_id;
-    const wantedQty = Math.max(1, Number(it.quantity ?? 1));
+    const qtyWanted = Math.max(1, Number(it.quantity ?? 1));
 
     if (!productId || !variantId) {
       toast.error("Impossible de recommander cet article (infos manquantes).");
@@ -133,7 +135,7 @@ export default function OrdersPage() {
     }
 
     try {
-      // 1) produit existe + actif
+      // product must exist + active
       const { data: product, error: pErr } = await sb
         .from("products")
         .select("*")
@@ -146,9 +148,9 @@ export default function OrdersPage() {
         return;
       }
 
-      // 2) variante existe + active + stock
+      // ✅ variant from product_variant (ton vrai nom)
       const { data: variant, error: vErr } = await sb
-        .from("product_variant") // ✅ ton nom de table
+        .from("product_variant")
         .select("*")
         .eq("id", variantId)
         .maybeSingle();
@@ -156,28 +158,21 @@ export default function OrdersPage() {
       if (vErr) throw vErr;
 
       const stock = Math.max(0, Number(variant?.stock_count ?? 0));
-      const variantActive = variant?.is_active !== false;
-
-      if (!variant || !variantActive) {
-        toast.error("Variante indisponible.");
-        return;
-      }
-
-      if (stock <= 0) {
+      if (!variant || stock <= 0) {
         toast.error("Variante en rupture de stock.");
         return;
       }
 
-      const finalQty = Math.min(wantedQty, stock);
+      const qtyFinal = Math.min(qtyWanted, stock);
+      addToCart(product, variant, qtyFinal);
 
-      addToCart(product, variant, finalQty);
       toast.success(
-        finalQty < wantedQty
+        qtyFinal < qtyWanted
           ? "Ajouté au panier (quantité ajustée au stock)."
           : "Ajouté au panier ✅"
       );
     } catch (e: any) {
-      console.error("reorderItem error:", e);
+      console.error(e);
       toast.error(e?.message ?? "Erreur lors de la recommandation");
     }
   };
@@ -188,6 +183,7 @@ export default function OrdersPage() {
     <div className="p-6 bg-card rounded-xl shadow-card">
       <div className="flex items-center justify-between gap-4">
         <h2 className="font-serif text-xl font-semibold text-foreground">Mes commandes</h2>
+
         <Button variant="outline" onClick={loadOrders} disabled={loading}>
           {loading ? "Chargement..." : "Rafraîchir"}
         </Button>
@@ -199,8 +195,8 @@ export default function OrdersPage() {
         <div className="text-center py-10 text-muted-foreground">
           <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>Aucune commande pour le moment</p>
-          <Button className="mt-4" variant="hero" asChild>
-            <Link to="/shop">Aller à la boutique</Link>
+          <Button className="mt-4" variant="hero" onClick={() => navigate("/account/shop")}>
+            Aller à la boutique
           </Button>
         </div>
       )}
@@ -236,7 +232,8 @@ export default function OrdersPage() {
                 <div className="mt-4 border-t border-border pt-4">
                   {itemsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Chargement des items...
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Chargement des items...
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -257,7 +254,7 @@ export default function OrdersPage() {
                                     {it.length != null ? ` - ${it.length}"` : ""})
                                   </span>
                                 ) : null}
-                                {" • "}x{Math.max(1, Number(it.quantity ?? 1))}
+                                {" • "}x{Number(it.quantity ?? 1)}
                               </div>
                               <div className="font-medium text-foreground">
                                 {formatMoneyFCFA(Number(it.unit_price ?? 0))}

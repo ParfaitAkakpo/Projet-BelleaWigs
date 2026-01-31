@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { User, Package, ShoppingBag, ShoppingCart, LayoutDashboard, Heart } from "lucide-react";
 
+
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -42,8 +43,8 @@ export default function AccountShell() {
   // protect routes
   useEffect(() => {
     if (session === null) return; // wait first fetch
-    if (!isLoggedIn) navigate("/account", { replace: true, state: { from: location.pathname } });
-  }, [isLoggedIn, session, navigate, location.pathname]);
+    if (!isLoggedIn) navigate("/account/login", { replace: true, state: { from: location.pathname } });
+ }, [isLoggedIn, session, navigate, location.pathname]);
 
   // load profile
   useEffect(() => {
@@ -98,7 +99,15 @@ export default function AccountShell() {
   ];
 
   // If not logged yet, avoid rendering flicker
-  if (!isLoggedIn) return null;
+ if (!isLoggedIn) {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center text-muted-foreground">
+      Chargement...
+    </div>
+  );
+}
+
+
 
   return (
     <div className="min-h-screen bg-background">

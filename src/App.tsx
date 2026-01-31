@@ -76,15 +76,15 @@ const App = () => (
 
                 {/* =======================
                    AUTH (login/register)
-                   => garde /account pour login
+                   ✅ /account reste la page login
                 ======================= */}
                 <Route path="/account" element={<Account />} />
 
                 {/* =======================
-                   ESPACE CLIENT (dans le compte)
-                   => /account/... est intégré dans AccountShell
+                   ESPACE CLIENT
+                   ✅ /account/* = Shell + pages internes
                 ======================= */}
-                <Route path="/account" element={<AccountShell />}>
+                <Route path="/account/*" element={<AccountShell />}>
                   <Route index element={<DashboardPage />} />
                   <Route path="dashboard" element={<DashboardPage />} />
                   <Route path="orders" element={<OrdersPage />} />

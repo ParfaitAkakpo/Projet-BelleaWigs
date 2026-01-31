@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
 
-//import AdminProductsPanel from "@/pages/admin/AdminProductsPanel";
-//import AdminCatalog from "@/pages/admin/AdminCatalog";
+import AdminProductsPanel from "@/pages/admin/AdminProductsPanel";
+import AdminCatalog from "@/pages/admin/AdminCatalog";
 
 const sb = supabase as any;
 
@@ -657,8 +657,8 @@ export default function Account() {
                 </div>
               )}
 
-              {/*activeTab === "admin_products" && isAdmin && <AdminProductsPanel />*/}
-              {/*activeTab === "admin_catalog" && isAdmin && <AdminCatalog />*/}
+              {activeTab === "admin_products" && isAdmin && <AdminProductsPanel />}
+              {activeTab === "admin_catalog" && isAdmin && <AdminCatalog />}
 
               {activeTab === "orders" && (
                 <div className="p-6 bg-card rounded-xl shadow-card">

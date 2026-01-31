@@ -1,7 +1,8 @@
 // src/components/Header.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ShoppingBag, User, Menu, X, Search, LogOut, Package, LayoutDashboard } from "lucide-react";
+import { ShoppingCart, User, Menu, X, Search, LogOut, Package, LayoutDashboard } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ const Header = () => {
     { href: "/shop?filter=promotions", label: "Promotions" },
   ];
 
+  // session listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -41,12 +43,14 @@ const Header = () => {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // close menus on route change
   useEffect(() => {
     setIsMenuOpen(false);
     setIsSearchOpen(false);
     setAccountMenuOpen(false);
   }, [location.pathname, location.search]);
 
+  // close dropdown on outside click + ESC
   useEffect(() => {
     if (!accountMenuOpen) return;
 
@@ -104,10 +108,18 @@ const Header = () => {
     try {
       await supabase.auth.signOut();
       setAccountMenuOpen(false);
-      navigate("/");
+      navigate("/", { replace: true });
     } catch (e) {
       console.error("logout error", e);
     }
+  };
+
+  const goToAccountHome = () => {
+    if (!isLoggedIn) {
+      navigate("/account/login");
+      return;
+    }
+    navigate("/account/dashboard");
   };
 
   return (
@@ -137,6 +149,7 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-2 md:gap-4">
+          {/* Search (desktop) */}
           <div className="hidden md:flex items-center">
             {isSearchOpen ? (
               <SearchAutocomplete onClose={closeSearch} className="animate-fade-in" inputClassName="w-64 h-9" />
@@ -147,6 +160,7 @@ const Header = () => {
             )}
           </div>
 
+          {/* Search (mobile) */}
           <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleSearch} aria-label="Rechercher">
             <Search className="h-5 w-5" />
           </Button>
@@ -156,12 +170,12 @@ const Header = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="relative" // ✅ IMPORTANT pour le petit point
+              className="relative"
               aria-label={accountLabel}
               aria-haspopup="menu"
               aria-expanded={accountMenuOpen}
               onClick={() => {
-                if (!isLoggedIn) return navigate("/account");
+                if (!isLoggedIn) return navigate("/account/login");
                 setAccountMenuOpen((v) => !v);
               }}
             >
@@ -184,7 +198,7 @@ const Header = () => {
                     className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-muted text-foreground"
                     onClick={() => {
                       setAccountMenuOpen(false);
-                      navigate("/account?tab=profile");
+                      navigate("/account/dashboard");
                     }}
                   >
                     <LayoutDashboard className="h-4 w-4" />
@@ -196,7 +210,7 @@ const Header = () => {
                     className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-muted text-foreground"
                     onClick={() => {
                       setAccountMenuOpen(false);
-                      navigate("/account?tab=orders");
+                      navigate("/account/orders");
                     }}
                   >
                     <Package className="h-4 w-4" />
@@ -217,9 +231,10 @@ const Header = () => {
           </div>
 
           {/* Cart */}
-          <Link to="/cart" className="relative">
+          <Link to={isLoggedIn ? "/account/cart" : "/cart"} className="relative">
             <Button variant="ghost" size="icon" className="relative" aria-label="Panier">
-              <ShoppingBag className="h-5 w-5" />
+              {/* ✅ Cart icon recommandé */}
+              <ShoppingCart className="h-5 w-5" />
               {totalItems > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                   {totalItems}
@@ -228,12 +243,14 @@ const Header = () => {
             </Button>
           </Link>
 
+          {/* Menu */}
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleMenu} aria-label="Menu">
             {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
         </div>
       </div>
 
+      {/* Search mobile area */}
       {isSearchOpen && (
         <div className="md:hidden border-t border-border animate-fade-in">
           <div className="container py-3">
@@ -242,6 +259,7 @@ const Header = () => {
         </div>
       )}
 
+      {/* Mobile menu */}
       {isMenuOpen && (
         <div className="lg:hidden border-t border-border animate-fade-in">
           <nav className="container py-4 flex flex-col gap-2">
@@ -263,7 +281,7 @@ const Header = () => {
               type="button"
               onClick={() => {
                 setIsMenuOpen(false);
-                navigate(isLoggedIn ? "/account?tab=profile" : "/account");
+                goToAccountHome();
               }}
               className="text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-muted"
             >
