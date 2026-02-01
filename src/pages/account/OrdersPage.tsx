@@ -132,7 +132,7 @@ export default function OrdersPage() {
 
     try {
       const { data: product, error: pErr } = await sb
-        .from("products")
+        .from("product")
         .select("*")
         .eq("id", productId)
         .maybeSingle();

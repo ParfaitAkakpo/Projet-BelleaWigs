@@ -1,7 +1,7 @@
-// src/pages/account/AccountShell.tsx
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { User, Package, ShoppingBag, ShoppingCart, LayoutDashboard, Heart } from "lucide-react";
+
 
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -19,12 +19,14 @@ const sb = supabase as any;
 
 function firstName(fullName?: string | null) {
   const s = String(fullName ?? "").trim();
-  return s ? s.split(/\s+/)[0] ?? "" : "";
+  if (!s) return "";
+  return s.split(/\s+/)[0] ?? "";
 }
 
 export default function AccountShell() {
-  const [session, setSession] = useState<any>(undefined); // undefined = pas encore chargé
+  const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const isLoggedIn = !!session?.user;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,20 +35,16 @@ export default function AccountShell() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession ?? null);
+      setSession(newSession);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const isLoggedIn = !!session?.user;
-
   // protect routes
   useEffect(() => {
-    if (session === undefined) return; // wait first fetch
-    if (!isLoggedIn) {
-      navigate("/account", { replace: true, state: { from: location.pathname } });
-    }
-  }, [isLoggedIn, session, navigate, location.pathname]);
+    if (session === null) return; // wait first fetch
+    if (!isLoggedIn) navigate("/account/login", { replace: true, state: { from: location.pathname } });
+ }, [isLoggedIn, session, navigate, location.pathname]);
 
   // load profile
   useEffect(() => {
@@ -63,6 +61,7 @@ export default function AccountShell() {
         .maybeSingle();
 
       if (!res.data) {
+        // create profile if missing
         await sb.from("profiles").upsert({
           id: session.user.id,
           full_name: "",
@@ -88,40 +87,27 @@ export default function AccountShell() {
     loadProfile();
   }, [session?.user?.id]);
 
-  const isAdmin = useMemo(() => profile?.role === "admin", [profile?.role]);
-
-  // ✅ si admin connecté : on l’envoie vers /admin (pas d’UX client)
-  useEffect(() => {
-    if (isLoggedIn && isAdmin) {
-      navigate("/admin", { replace: true });
-    }
-  }, [isLoggedIn, isAdmin, navigate]);
-
   const helloName = useMemo(() => firstName(profile?.full_name) || "👋", [profile?.full_name]);
+const links = [
+  { to: "/account/dashboard", label: "Tableau de bord", icon: LayoutDashboard, end: true },
+  { to: "/account/orders", label: "Mes commandes", icon: Package },
+  { to: "/account/shop", label: "Boutique", icon: ShoppingBag },
+  { to: "/account/cart", label: "Panier", icon: ShoppingCart },
+  { to: "/account/favorites", label: "Favoris", icon: Heart },
+  // ✅ pas de /account/profile si tu n'as pas la page
+];
 
-  const links = [
-    { to: "/account/dashboard", label: "Tableau de bord", icon: LayoutDashboard, end: true },
-    { to: "/account/orders", label: "Mes commandes", icon: Package },
-    { to: "/account/shop", label: "Boutique", icon: ShoppingBag },
-    { to: "/account/cart", label: "Panier", icon: ShoppingCart },
-    { to: "/account/favorites", label: "Favoris", icon: Heart },
-    { to: "/account/profile", label: "Profil", icon: User }, // ✅ mets ça quand tu l’auras
-  ];
 
-  // Loading state
-  if (session === undefined) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center text-muted-foreground">
-        Chargement...
-      </div>
-    );
-  }
+  // If not logged yet, avoid rendering flicker
+ if (!isLoggedIn) {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center text-muted-foreground">
+      Chargement...
+    </div>
+  );
+}
 
-  // Not logged yet (redirection en cours)
-  if (!isLoggedIn) return null;
 
-  // Admin (redirection)
-  if (isAdmin) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -131,7 +117,9 @@ export default function AccountShell() {
             <h1 className="font-serif text-3xl md:text-4xl font-bold text-foreground">
               Mon Compte
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Bonjour {helloName}</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Bonjour {helloName}
+            </p>
           </div>
         </div>
 
@@ -159,7 +147,7 @@ export default function AccountShell() {
               type="button"
               onClick={async () => {
                 await supabase.auth.signOut();
-                navigate("/account", { replace: true });
+                navigate("/", { replace: true });
               }}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
             >

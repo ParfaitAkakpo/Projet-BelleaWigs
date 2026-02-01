@@ -401,7 +401,7 @@ export default function Account() {
 
       // Récupère products
       const { data: prods, error: pErr } = await sb
-        .from("products")
+        .from("product")
         .select("id, name, slug, description, category, is_active, base_price_min, original_price, details, image_url")
         .in("id", productIds);
 
