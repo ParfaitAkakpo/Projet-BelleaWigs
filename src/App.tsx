@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import Layout from "@/components/layout/Layout";
 import RequireAdmin from "@/components/auth/RequireAdmin";
+import EmailConfirmed from "@/pages/account/EmailConfirmed";
+
 
 import { HelmetProvider } from "react-helmet-async";
 import RouteSEO from "@/components/seo/RouteSEO";
@@ -17,6 +19,7 @@ import AdminLogin from "@/pages/admin/AdminLogin";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminProducts from "@/pages/admin/AdminProductsPanel";
 import AdminCatalog from "@/pages/admin/AdminCatalog";
+import AdminOrders from "@/pages/admin/AdminOrders"; // ✅ AJOUT
 
 // ✅ Account
 import Account from "./pages/Account"; // login/register
@@ -78,6 +81,8 @@ const App = () => (
                    ✅ login/register = /account/login
                 ======================= */}
                 <Route path="/account/login" element={<Account />} />
+                <Route path="/account/confirmed" element={<EmailConfirmed />} />
+
 
                 {/* =======================
                    ESPACE CLIENT
@@ -101,9 +106,12 @@ const App = () => (
                    ADMIN
                 ======================= */}
                 <Route path="/admin/login" element={<AdminLogin />} />
+
+                {/* ✅ ADMIN protected routes */}
                 <Route element={<RequireAdmin />}>
                   <Route path="/admin">
                     <Route index element={<AdminDashboard />} />
+                    <Route path="orders" element={<AdminOrders />} /> {/* ✅ AJOUT */}
                     <Route path="products" element={<AdminProducts />} />
                     <Route path="catalog" element={<AdminCatalog />} />
                   </Route>
