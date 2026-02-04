@@ -1,29 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  ShoppingCart,
-  User,
-  Menu,
-  X,
-  Search,
-  LogOut,
-  Package,
-  LayoutDashboard,
-} from "lucide-react";
+import { ShoppingCart, User, Menu, X, Search, LogOut, Package, LayoutDashboard } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { cn } from "@/lib/utils";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
-import { supabase } from "@/integrations/supabase/client";
 import { useAdmin } from "@/hooks/useAdmin";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-
-  const [session, setSession] = useState<any>(null);
-  const isLoggedIn = !!session?.user;
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -33,8 +20,9 @@ const Header = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // 🔐 ADMIN STATE
-  const { isAdmin, loading: adminLoading, signOut } = useAdmin();
+  // ✅ UNE SEULE SOURCE D’AUTH
+  const { user, isAdmin, loading: adminLoading, signOut } = useAdmin();
+  const isLoggedIn = !!user;
 
   const closeSearch = () => setIsSearchOpen(false);
 
@@ -45,15 +33,6 @@ const Header = () => {
     { href: "/shop?filter=perruques", label: "Perruques" },
     { href: "/shop?filter=promotions", label: "Promotions" },
   ];
-
-  // session listener
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
 
   // close menus on route change
   useEffect(() => {
@@ -207,7 +186,7 @@ const Header = () => {
               <div className="absolute right-0 mt-2 w-56 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
                 <div className="px-4 py-3 border-b border-border">
                   <p className="text-sm font-medium text-foreground">Connecté</p>
-                  <p className="text-xs text-muted-foreground truncate">{session?.user?.email}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                 </div>
 
                 <div className="p-2 flex flex-col gap-1">
@@ -216,9 +195,7 @@ const Header = () => {
                     disabled={adminLoading}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-                      adminLoading
-                        ? "opacity-60 cursor-not-allowed"
-                        : "hover:bg-muted text-foreground"
+                      adminLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-muted text-foreground"
                     )}
                     onClick={goToDashboard}
                   >
@@ -231,9 +208,7 @@ const Header = () => {
                     disabled={adminLoading}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-                      adminLoading
-                        ? "opacity-60 cursor-not-allowed"
-                        : "hover:bg-muted text-foreground"
+                      adminLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-muted text-foreground"
                     )}
                     onClick={goToOrders}
                   >
@@ -293,9 +268,7 @@ const Header = () => {
                 onClick={() => setIsMenuOpen(false)}
                 className={cn(
                   "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
-                  isActive(link.href)
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted"
+                  isActive(link.href) ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
                 )}
               >
                 {link.label}
