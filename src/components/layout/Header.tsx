@@ -1,3 +1,4 @@
+// src/components/Header.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ShoppingCart, User, Menu, X, Search, LogOut, Package, LayoutDashboard } from "lucide-react";
@@ -6,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { cn } from "@/lib/utils";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
-import { useAdmin } from "@/hooks/useAdmin";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -20,8 +22,8 @@ const Header = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // ✅ UNE SEULE SOURCE D’AUTH
-  const { user, isAdmin, loading: adminLoading, signOut } = useAdmin();
+  // ✅ SOURCE UNIQUE D’AUTH (AuthProvider)
+  const { user, isAdmin, loading: authLoading, signOut } = useAuth();
   const isLoggedIn = !!user;
 
   const closeSearch = () => setIsSearchOpen(false);
@@ -95,28 +97,51 @@ const Header = () => {
 
   const accountLabel = useMemo(() => (isLoggedIn ? "Mon compte" : "Connexion"), [isLoggedIn]);
 
-  const handleLogout = async () => {
+  // ✅ Logout “béton” (évite le “reste connecté demain”)
+  const hardLogout = async () => {
     try {
+      // essaye global (peut fail)
+      // @ts-ignore
+      await supabase.auth.signOut({ scope: "global" });
+    } catch {
+      // local fallback
+      try {
+        // @ts-ignore
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {}
+    } finally {
+      // Supprime la session persistée si jamais signOut a pas clean
+      try {
+        const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL?.replace(/^https?:\/\//, "").split(".")[0]}-auth-token`;
+        localStorage.removeItem(storageKey);
+      } catch {}
+
+      // et on remet le context clean
       await signOut();
       setAccountMenuOpen(false);
       navigate("/", { replace: true });
-    } catch (e) {
-      console.error("logout error", e);
     }
   };
 
   const goToDashboard = () => {
     if (!isLoggedIn) return navigate("/account/login");
-    if (adminLoading) return;
+    if (authLoading) return;
     setAccountMenuOpen(false);
     navigate(isAdmin ? "/admin" : "/account/dashboard");
   };
 
   const goToOrders = () => {
     if (!isLoggedIn) return navigate("/account/login");
-    if (adminLoading) return;
+    if (authLoading) return;
     setAccountMenuOpen(false);
     navigate(isAdmin ? "/admin/orders" : "/account/orders");
+  };
+
+  const goToAccountFromMobile = () => {
+    setIsMenuOpen(false);
+    if (!isLoggedIn) return navigate("/account/login");
+    if (authLoading) return;
+    navigate(isAdmin ? "/admin" : "/account/dashboard");
   };
 
   return (
@@ -192,34 +217,34 @@ const Header = () => {
                 <div className="p-2 flex flex-col gap-1">
                   <button
                     type="button"
-                    disabled={adminLoading}
+                    disabled={authLoading}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-                      adminLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-muted text-foreground"
+                      authLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-muted text-foreground"
                     )}
                     onClick={goToDashboard}
                   >
                     <LayoutDashboard className="h-4 w-4" />
-                    {adminLoading ? "Chargement…" : isAdmin ? "Administration" : "Tableau de bord"}
+                    {authLoading ? "Chargement…" : isAdmin ? "Administration" : "Tableau de bord"}
                   </button>
 
                   <button
                     type="button"
-                    disabled={adminLoading}
+                    disabled={authLoading}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-                      adminLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-muted text-foreground"
+                      authLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-muted text-foreground"
                     )}
                     onClick={goToOrders}
                   >
                     <Package className="h-4 w-4" />
-                    {adminLoading ? "Chargement…" : isAdmin ? "Toutes les commandes" : "Mes commandes"}
+                    {authLoading ? "Chargement…" : isAdmin ? "Toutes les commandes" : "Mes commandes"}
                   </button>
 
                   <button
                     type="button"
                     className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-destructive hover:text-destructive-foreground text-destructive"
-                    onClick={handleLogout}
+                    onClick={hardLogout}
                   >
                     <LogOut className="h-4 w-4" />
                     Déconnexion
@@ -274,6 +299,14 @@ const Header = () => {
                 {link.label}
               </Link>
             ))}
+
+            <button
+              type="button"
+              onClick={goToAccountFromMobile}
+              className="text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-muted"
+            >
+              {authLoading ? "Chargement…" : isLoggedIn ? "Mon compte" : "Connexion"}
+            </button>
           </nav>
         </div>
       )}

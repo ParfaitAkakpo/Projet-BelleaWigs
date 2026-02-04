@@ -1,5 +1,5 @@
 // src/pages/account/EmailConfirmed.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, Loader2, ArrowRight } from "lucide-react";
 
@@ -9,15 +9,23 @@ import { supabase } from "@/integrations/supabase/client";
 const sb = supabase as any;
 type Role = "admin" | "customer" | string;
 
+function cleanUrl() {
+  // enlève les params sensibles (code, token...) de l’URL
+  try {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } catch {}
+}
+
 export default function EmailConfirmed() {
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
   const [hasSession, setHasSession] = useState(false);
+  const [targetPath, setTargetPath] = useState<string>("/account/dashboard");
 
-  const goTarget = async (uid: string) => {
-    const { data } = await sb.from("profiles").select("role").eq("id", uid).maybeSingle();
-    const role: Role = (data?.role ?? "customer") as any;
-    navigate(role === "admin" ? "/admin" : "/account/dashboard", { replace: true });
+  const redirectTimer = useRef<number | null>(null);
+
+  const goTarget = (path: string) => {
+    navigate(path, { replace: true });
   };
 
   useEffect(() => {
@@ -25,24 +33,57 @@ export default function EmailConfirmed() {
 
     (async () => {
       try {
-        // Permet à Supabase de finaliser la session après redirect
+        // ✅ 1) Important : échange du code contre une session (flow email)
+        // Selon les versions supabase-js, cette méthode peut être requise pour finaliser la session.
+        try {
+          // @ts-ignore
+          await supabase.auth.exchangeCodeForSession(window.location.href);
+        } catch {
+          // pas grave si la méthode n’existe pas / échoue : on fallback sur getSession()
+        }
+
         const { data } = await supabase.auth.getSession();
         const session = data?.session ?? null;
 
         if (!mounted) return;
 
-        if (session?.user?.id) {
-          setHasSession(true);
-
-          // Petite pause UX avant redirect
-          setTimeout(() => {
-            goTarget(session.user.id);
-          }, 1500);
-
+        if (!session?.user?.id) {
+          setHasSession(false);
           return;
         }
 
-        setHasSession(false);
+        setHasSession(true);
+
+        const uid = session.user.id;
+
+        // ✅ 2) Récupère role (et crée profile si absent)
+        let role: Role = "customer";
+
+        const res = await sb.from("profiles").select("role").eq("id", uid).maybeSingle();
+
+        if (!res?.data) {
+          // profile manquant -> on le crée
+          await sb.from("profiles").upsert({
+            id: uid,
+            role: "customer",
+            updated_at: new Date().toISOString(),
+          });
+          role = "customer";
+        } else {
+          role = (res.data.role ?? "customer") as any;
+        }
+
+        const nextPath = role === "admin" ? "/admin" : "/account/dashboard";
+        setTargetPath(nextPath);
+
+        // ✅ 3) clean URL
+        cleanUrl();
+
+        // ✅ petite pause UX avant redirect auto
+        redirectTimer.current = window.setTimeout(() => {
+          if (!mounted) return;
+          goTarget(nextPath);
+        }, 1400);
       } finally {
         if (mounted) setChecking(false);
       }
@@ -50,6 +91,7 @@ export default function EmailConfirmed() {
 
     return () => {
       mounted = false;
+      if (redirectTimer.current) window.clearTimeout(redirectTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -59,6 +101,22 @@ export default function EmailConfirmed() {
     if (hasSession) return "Email confirmé. Redirection vers ton espace…";
     return "Email confirmé. Tu peux maintenant te connecter.";
   }, [checking, hasSession]);
+
+  const primaryCta = useMemo(() => {
+    if (checking) return { label: "Vérification…", onClick: () => {}, disabled: true };
+    if (hasSession) {
+      return {
+        label: "Aller à mon espace",
+        onClick: () => goTarget(targetPath),
+        disabled: false,
+      };
+    }
+    return {
+      label: "Me connecter",
+      onClick: () => navigate("/account/login", { replace: true }),
+      disabled: false,
+    };
+  }, [checking, hasSession, navigate, targetPath]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center py-16">
@@ -101,7 +159,6 @@ export default function EmailConfirmed() {
           )}
 
           <div className="flex items-start gap-4 relative">
-            {/* Badge success animé */}
             <div className="relative h-14 w-14 shrink-0">
               {checking ? (
                 <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -109,7 +166,6 @@ export default function EmailConfirmed() {
                 </div>
               ) : (
                 <>
-                  {/* ring pulse */}
                   <div
                     className="absolute inset-0 rounded-2xl bg-primary/20"
                     style={{ animation: "ring 900ms ease-out 1" }}
@@ -125,26 +181,18 @@ export default function EmailConfirmed() {
             </div>
 
             <div className="flex-1">
-              <h1 className="font-serif text-2xl font-bold text-foreground">
-                Email confirmé ✅
-              </h1>
+              <h1 className="font-serif text-2xl font-bold text-foreground">Email confirmé ✅</h1>
               <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
 
               {hasSession && !checking && (
-                <div className="mt-3 text-xs text-muted-foreground">
-                  Redirection automatique…
-                </div>
+                <div className="mt-3 text-xs text-muted-foreground">Redirection automatique…</div>
               )}
             </div>
           </div>
 
           <div className="mt-6 flex flex-col gap-2 relative">
-            <Button
-              variant="hero"
-              onClick={() => navigate("/account/login", { replace: true })}
-              disabled={checking && hasSession}
-            >
-              Me connecter
+            <Button variant="hero" onClick={primaryCta.onClick} disabled={primaryCta.disabled}>
+              {primaryCta.label}
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
 
@@ -156,7 +204,7 @@ export default function EmailConfirmed() {
           </div>
 
           <p className="text-xs text-muted-foreground mt-4 relative">
-            Si tu n’es pas redirigé automatiquement, clique sur “Me connecter”.
+            Si tu n’es pas redirigé automatiquement, clique sur le bouton ci-dessus.
           </p>
         </div>
       </div>

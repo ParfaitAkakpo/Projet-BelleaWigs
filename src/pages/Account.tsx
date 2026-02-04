@@ -25,8 +25,9 @@ type Country = "togo" | "benin";
 const phoneCodes: Record<Country, string> = { togo: "+228", benin: "+229" };
 
 type Role = "admin" | "customer" | string;
-
 type Step = "form" | "check_email";
+
+const EMAIL_REDIRECT_TO = "https://www.belleawigs.com/account/confirmed";
 
 export default function Account() {
   const navigate = useNavigate();
@@ -59,10 +60,24 @@ export default function Account() {
     authConfirmPassword: "auth_confirm_password",
   } as const;
 
+  const ensureProfile = async (uid: string) => {
+    // crée profile s'il n'existe pas (évite role null)
+    const res = await sb.from("profiles").select("id, role").eq("id", uid).maybeSingle();
+    if (res?.data?.id) return res.data;
+
+    await sb.from("profiles").upsert({
+      id: uid,
+      role: "customer",
+      updated_at: new Date().toISOString(),
+    });
+
+    const res2 = await sb.from("profiles").select("id, role").eq("id", uid).maybeSingle();
+    return res2?.data ?? { id: uid, role: "customer" };
+  };
+
   const redirectToSpace = async (uid: string) => {
-    // 🔐 lit role dans profiles
-    const { data } = await sb.from("profiles").select("role").eq("id", uid).maybeSingle();
-    const role: Role = (data?.role ?? "customer") as any;
+    const p = await ensureProfile(uid);
+    const role: Role = (p?.role ?? "customer") as any;
     navigate(role === "admin" ? "/admin" : "/account/dashboard", { replace: true });
   };
 
@@ -71,19 +86,23 @@ export default function Account() {
     let mounted = true;
 
     (async () => {
-      const { data } = await supabase.auth.getSession();
-      const session = data?.session ?? null;
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session ?? null;
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (session?.user?.id) {
-        await redirectToSpace(session.user.id);
-        return;
+        if (session?.user?.id) {
+          await redirectToSpace(session.user.id);
+          return;
+        }
+
+        // optionnel: pré-remplir email depuis query ?email=
+        const mail = (searchParams.get("email") || "").trim();
+        if (mail) setEmail(mail);
+      } catch (e) {
+        // pas bloquant
       }
-
-      // optionnel: pré-remplir email depuis query ?email=
-      const mail = (searchParams.get("email") || "").trim();
-      if (mail) setEmail(mail);
     })();
 
     return () => {
@@ -112,15 +131,24 @@ export default function Account() {
 
   const humanAuthError = (raw: string) => {
     const s = (raw || "").toLowerCase();
+
+    // erreurs fréquentes supabase
     if (s.includes("invalid login credentials")) return "Email ou mot de passe incorrect.";
     if (s.includes("email not confirmed")) return "Ton email n’est pas encore confirmé.";
     if (s.includes("user already registered")) return "Un compte existe déjà avec cet email.";
+
+    // réseau / timeout (ton 504)
+    if (s.includes("504") || s.includes("timeout") || s.includes("failed to fetch") || s.includes("retryable")) {
+      return "Erreur réseau (timeout). Réessaie dans 30 secondes, ou change de connexion (Wi-Fi/4G).";
+    }
+
     return raw || "Une erreur est survenue.";
   };
 
   const resendConfirmation = async () => {
     const mail = email.trim();
     if (!mail) return;
+
     setLoading(true);
     setErrorMsg("");
     setInfo("");
@@ -129,9 +157,11 @@ export default function Account() {
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: mail,
-      });
+        options: { emailRedirectTo: EMAIL_REDIRECT_TO },
+      } as any);
 
       if (error) throw error;
+
       setInfo("Email de confirmation renvoyé ✅ Vérifie ta boîte mail (et tes spams).");
     } catch (e: any) {
       console.error("resend error:", e);
@@ -170,8 +200,11 @@ export default function Account() {
 
         const uid = data?.session?.user?.id;
         if (!uid) {
-          // cas rare: pas de session (selon config)
           setInfo("Connexion réussie. Redirection…");
+          // fallback : re-check session
+          const sess = await supabase.auth.getSession();
+          const uid2 = sess.data?.session?.user?.id;
+          if (uid2) await redirectToSpace(uid2);
           return;
         }
 
@@ -183,33 +216,30 @@ export default function Account() {
       const phoneFull = `${phoneCodes[country]}${phone.trim()}`;
 
       const { data, error } = await supabase.auth.signUp({
-  email: mail,
-  password: pass,
-  options: {
-    emailRedirectTo: `${window.location.origin}/account/confirmed`,
-    data: { full_name: fullName.trim(), phone: phoneFull, country },
-  },
-});
-
+        email: mail,
+        password: pass,
+        options: {
+          data: { full_name: fullName.trim(), phone: phoneFull, country },
+          emailRedirectTo: EMAIL_REDIRECT_TO,
+        },
+      });
 
       if (error) throw error;
 
-      // Selon la config supabase, session peut être null (email confirm required)
-      // On passe à l'écran "check email" quoi qu'il arrive pour une UX pro.
+      // UX pro : écran "check email" dans tous les cas
       setStep("check_email");
       setInfo(
-        "Compte créé ✅ On t’a envoyé un email pour confirmer ton adresse. Ouvre le lien de confirmation, puis reviens ici te connecter."
+        "Compte créé ✅ On t’a envoyé un email pour confirmer ton adresse. Ouvre le lien de confirmation, puis reviens te connecter."
       );
 
-      // optionnel: si jamais une session existe déjà (si confirm pas required)
+      // Si jamais la config supabase ne demande pas la confirmation => session possible
       const uid = data?.session?.user?.id;
       if (uid) await redirectToSpace(uid);
     } catch (err: any) {
       console.error("Auth error:", err);
       const msg = humanAuthError(err?.message ?? "Erreur de connexion/inscription");
-
-      // si login mais email non confirmé => proposer resend
       setErrorMsg(msg);
+
       if (msg.toLowerCase().includes("confirm")) {
         setInfo("Tu peux renvoyer l’email de confirmation juste en dessous.");
       }
@@ -233,9 +263,7 @@ export default function Account() {
 
           <h1 className="font-serif text-2xl font-bold text-foreground">{title}</h1>
           <p className="text-muted-foreground mt-2">
-            {isLogin
-              ? "Connecte-toi pour accéder à ton espace."
-              : "Crée ton compte en quelques secondes."}
+            {isLogin ? "Connecte-toi pour accéder à ton espace." : "Crée ton compte en quelques secondes."}
           </p>
         </div>
 
@@ -254,25 +282,11 @@ export default function Account() {
                 </div>
               </div>
 
-              {info && (
-                <div className="bg-primary/10 text-primary text-sm p-3 rounded-lg">
-                  {info}
-                </div>
-              )}
-
-              {errorMsg && (
-                <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">
-                  {errorMsg}
-                </div>
-              )}
+              {info && <div className="bg-primary/10 text-primary text-sm p-3 rounded-lg">{info}</div>}
+              {errorMsg && <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">{errorMsg}</div>}
 
               <div className="flex flex-col gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resendConfirmation}
-                  disabled={loading || !email.trim()}
-                >
+                <Button type="button" variant="outline" onClick={resendConfirmation} disabled={loading || !email.trim()}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   {loading ? "Renvoi..." : "Renvoyer l’email"}
                 </Button>
@@ -293,17 +307,15 @@ export default function Account() {
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Astuce : vérifie aussi les spams / courriers indésirables.
+                Astuce : vérifie aussi les spams / courriers indésirables. Si tu es sur iCloud/Outlook, ça peut aller en
+                “Promotions”.
               </p>
             </div>
           ) : (
             <>
               {/* MESSAGES */}
-              {!!info && (
-                <div className="mb-4 bg-primary/10 text-primary text-sm p-3 rounded-lg">
-                  {info}
-                </div>
-              )}
+              {!!info && <div className="mb-4 bg-primary/10 text-primary text-sm p-3 rounded-lg">{info}</div>}
+
               {!!errorMsg && (
                 <div className="mb-4 bg-destructive/10 text-destructive text-sm p-3 rounded-lg flex gap-2">
                   <AlertTriangle className="h-4 w-4 mt-0.5" />
@@ -448,7 +460,7 @@ export default function Account() {
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
 
-                {/* ✅ si email non confirmé => bouton renvoi (pro) */}
+                {/* ✅ si email non confirmé => bouton renvoi */}
                 {isLogin && errorMsg.toLowerCase().includes("confirm") && (
                   <Button
                     type="button"
@@ -464,14 +476,8 @@ export default function Account() {
               </form>
 
               <div className="mt-6 text-center text-sm">
-                <span className="text-muted-foreground">
-                  {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}
-                </span>{" "}
-                <button
-                  type="button"
-                  onClick={handleToggleMode}
-                  className="text-primary font-medium hover:underline"
-                >
+                <span className="text-muted-foreground">{isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}</span>{" "}
+                <button type="button" onClick={handleToggleMode} className="text-primary font-medium hover:underline">
                   {isLogin ? "S'inscrire" : "Se connecter"}
                 </button>
               </div>
